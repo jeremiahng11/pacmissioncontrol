@@ -472,7 +472,7 @@ export default function AgentOffice() {
   const [selected, setSelected] = useState(null);
   const [doc, setDoc] = useState(null);
   const [say, setSay] = useState(null);
-  const [courier, setCourier] = useState(null);
+  const [jay, setJay] = useState({ coords: null, facing: "right", say: null });
   const [taskFilter, setTaskFilter] = useState("all");
   const [idleDismissed, setIdleDismissed] = useState(false);
   const [autoDismissed, setAutoDismissed] = useState(false);
@@ -493,10 +493,9 @@ export default function AgentOffice() {
   const downloadCode = (id) => downloadFrom(`/api/documents/${id}/code`);
 
   const roomsRef = useRef(null);
-  const queueRef = useRef([]);
-  const runningRef = useRef(false);
+  const jayQueue = useRef([]);
   const lastEvtRef = useRef(0);
-  const timersRef = useRef([]);
+  const jayTimers = useRef([]);
 
   const agents = AGENTS.map((s) => ({
     ...s,
@@ -511,8 +510,8 @@ export default function AgentOffice() {
   const onPick = useCallback((department) => setForm((f) => ({ ...f, department })), []);
   const openDoc = useCallback((id) => { openDocument(id).then(setDoc).catch(() => {}); }, [openDocument]);
 
-  // Courier: Jay Jay walks Command HQ -> agent room -> back. One trip at a
-  // time; trips chain without dropping the sprite, so HQ never flickers.
+  // Jay Jay patrols the office while on duty — wanders between rooms, pauses,
+  // and breaks off to deliver a task to an agent when one is assigned.
   const centerOf = (room) => {
     const cont = roomsRef.current;
     if (!cont) return null;
@@ -521,47 +520,52 @@ export default function AgentOffice() {
     const cr = cont.getBoundingClientRect(), r = el.getBoundingClientRect();
     return { x: r.left - cr.left + r.width / 2, y: r.top - cr.top + r.height / 2 };
   };
-  const step = () => {
-    const item = queueRef.current.shift();
-    if (!item) {
-      // Fade out at HQ rather than popping, so the hand-off to the resting
-      // Jay Jay is smooth (no jump).
-      setCourier((c) => (c ? { ...c, exiting: true } : null));
-      timersRef.current.push(setTimeout(() => { setCourier(null); runningRef.current = false; }, 320));
-      return;
+  const jayStep = () => {
+    const T = jayTimers.current;
+    const item = jayQueue.current.shift();
+    if (item) {
+      // Deliver: walk to the agent's room, announce, pause, then resume patrol.
+      const c = centerOf(item.room);
+      if (c) {
+        setJay((j) => ({ coords: c, facing: c.x < (j.coords?.x ?? c.x) ? "left" : "right", say: `→ ${item.name}: ${item.task}` }));
+        setSay({ room: item.room, text: "on it!" });
+      }
+      T.push(setTimeout(() => {
+        setJay((j) => ({ ...j, say: null }));
+        setSay((s) => (s && s.room === item.room ? null : s));
+        T.push(setTimeout(jayStep, 500));
+      }, 2600));
+    } else {
+      // Patrol: wander to a random room and pause for a bit.
+      const room = ROOMS[Math.floor(Math.random() * ROOMS.length)];
+      const c = centerOf(room);
+      if (c) setJay((j) => ({ coords: c, facing: c.x < (j.coords?.x ?? c.x) ? "left" : "right", say: null }));
+      T.push(setTimeout(jayStep, 2200 + Math.random() * 2600));
     }
-    const hq = centerOf("COMMAND HQ"), tgt = centerOf(item.room);
-    if (!hq || !tgt) { setCourier(null); runningRef.current = false; return; }
-    const T = timersRef.current;
-    const goingLeft = tgt.x < hq.x; // face the direction of travel
-    setCourier({ ...item, coords: hq, showSpeech: false, facing: goingLeft ? "left" : "right" });
-    setSay({ room: item.room, text: "on it!" });
-    T.push(setTimeout(() => setCourier((c) => c && { ...c, coords: tgt }), 90));
-    T.push(setTimeout(() => setCourier((c) => c && { ...c, showSpeech: true }), 1350));
-    T.push(setTimeout(() => { setCourier((c) => c && { ...c, showSpeech: false, coords: hq, facing: goingLeft ? "right" : "left" }); setSay((s) => (s && s.room === item.room ? null : s)); }, 2800));
-    T.push(setTimeout(step, 3950));
   };
-  const runQueue = () => { if (runningRef.current) return; runningRef.current = true; step(); };
 
-  useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
+  // Start/stop the patrol loop with the Visual view.
+  useEffect(() => {
+    if (view !== "visual") return;
+    const start = setTimeout(() => { setJay((j) => (j.coords ? j : { ...j, coords: centerOf("COMMAND HQ") })); jayStep(); }, 200);
+    return () => { clearTimeout(start); jayTimers.current.forEach(clearTimeout); jayTimers.current = []; };
+  }, [view]);
 
+  // Queue deliveries from assign events; the patrol loop picks them up.
   useEffect(() => {
     if (!events.length) return;
     const maxId = Math.max(...events.map((e) => e.id));
-    if (lastEvtRef.current === 0) { lastEvtRef.current = maxId; return; } // skip history on first load
+    if (lastEvtRef.current === 0) { lastEvtRef.current = maxId; return; }
     const fresh = events.filter((e) => e.id > lastEvtRef.current && e.kind === "assign" && e.agentId);
     lastEvtRef.current = maxId;
     for (const e of fresh.reverse()) {
       const ag = AGENTS.find((x) => x.id === e.agentId);
       if (!ag || ag.cto) continue;
       const task = e.text.includes(": ") ? e.text.split(": ").slice(1).join(": ") : "";
-      queueRef.current.push({ room: ag.room, name: ag.name, task });
+      jayQueue.current.push({ room: ag.room, name: ag.name, task });
     }
-    if (queueRef.current.length > 4) queueRef.current = queueRef.current.slice(-4); // stay current
-    if (view === "visual") runQueue();
+    if (jayQueue.current.length > 5) jayQueue.current = jayQueue.current.slice(-5);
   }, [events]);
-
-  useEffect(() => { if (view === "visual") runQueue(); }, [view]);
 
   // Completion bubble: when an agent finishes, it tells Jay Jay "done!".
   const doneEvtRef = useRef(0);
@@ -591,7 +595,6 @@ export default function AgentOffice() {
 
   const badge = (s) => s === "command" ? ["ON-DUTY", "#a855f7"] : s === "working" ? ["ACTIVE", "#4ade80"] : s === "thinking" ? ["THINKING", "#eab308"] : ["IDLE", "#64786d"];
   const ticker = events.length ? events.slice(0, 16).map((e) => e.text) : ["Mission Control — connecting…"];
-  const ctoAway = !!courier;
 
   const composer = (
     <form style={SS.compose} onSubmit={submit}>
@@ -691,14 +694,14 @@ export default function AgentOffice() {
                 return (
                   <Room key={room} room={room} name={a.name} color={a.color} cto={!!a.cto} status={a.status} task={a.task}
                     department={a.department} cls={m.cls} h={m.h} walk={m.walk}
-                    sayText={say?.room === room ? say.text : null} ctoAway={a.cto && ctoAway} onPick={onPick} />
+                    sayText={say?.room === room ? say.text : null} ctoAway={!!a.cto} onPick={onPick} />
                 );
               })}
-              {courier && (
-                <div className="courier" style={{ left: courier.coords.x - 38, top: courier.coords.y - 58, opacity: courier.exiting ? 0 : 1 }}>
-                  {courier.showSpeech && <div className="courier-say">→ {courier.name}: {courier.task}</div>}
+              {jay.coords && (
+                <div className="courier" style={{ left: jay.coords.x - 38, top: jay.coords.y - 58 }}>
+                  {jay.say && <div className="courier-say">{jay.say}</div>}
                   <div className="oshadow courier-shadow" />
-                  <Octo color="#facc15" size={76} status="working" cto flip={courier.facing === "left"} />
+                  <Octo color="#facc15" size={76} status="working" cto flip={jay.facing === "left"} />
                 </div>
               )}
             </div>
