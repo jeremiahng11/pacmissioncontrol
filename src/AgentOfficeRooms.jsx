@@ -307,12 +307,12 @@ function MemoryView({ memory, onDelete }) {
   );
 }
 
-function IssuesView({ issues, byId, onResolve }) {
+function IssuesView({ issues, byId, onResolve, onRetry }) {
   const KIND = { quota: ["QUOTA", "#fb923c"], auth: ["AUTH", "#fb5570"], review: ["REVIEW", "#eab308"], error: ["ERROR", "#fb5570"] };
   return (
     <div style={SS.libWrap}>
       <h1 style={SS.h1}><AlertTriangle size={20} color="#fb923c" /> Issues</h1>
-      <div style={SS.libSub}>Problems Jay Jay couldn't resolve on its own and escalated to you (Group CTO) — API/quota, auth, or tasks that failed. Blocked tasks are not re-queued until you resolve the issue.</div>
+      <div style={SS.libSub}>Problems Jay Jay escalated to you (Group CTO) — API/quota, auth, or tasks that failed. <b>Retry & resolve</b> sends the task back to the agent to try again (continuing from partial work); <b>Dismiss</b> just closes the issue.</div>
       {issues.length === 0 && <div style={SS.queueEmpty}>No open issues. Everything's running clean. ✓</div>}
       <div style={SS.docsList}>
         {issues.map((i) => {
@@ -323,10 +323,15 @@ function IssuesView({ issues, byId, onResolve }) {
               <div style={SS.issueTop}>
                 <span style={{ ...SS.pill, color: kc, borderColor: `${kc}66`, background: `${kc}1a` }}>{kl}</span>
                 <span style={SS.issueTitle}>{i.title}</span>
-                <button style={SS.resolveBtn} onClick={() => onResolve(i.id)}><Check size={12} /> Resolve</button>
               </div>
               {i.detail && <pre style={SS.issueDetail}>{i.detail}</pre>}
-              <div style={SS.issueMeta}>{who ? `${who.name} · ` : ""}{fmtWhen(i.createdAt)}</div>
+              <div style={SS.issueBottom}>
+                <span style={SS.issueMeta}>{who ? `${who.name} · ` : ""}{fmtWhen(i.createdAt)}</span>
+                <div style={SS.issueActions}>
+                  {i.taskId && <button style={SS.resolveBtn} onClick={() => onRetry(i)}><RotateCw size={12} /> Retry &amp; resolve</button>}
+                  <button style={SS.dismissBtn} onClick={() => onResolve(i.id)}><Check size={12} /> Dismiss</button>
+                </div>
+              </div>
             </div>
           );
         })}
@@ -609,7 +614,7 @@ export default function AgentOffice() {
 
         {view === "memory" && <MemoryView memory={memory} onDelete={deleteMemory} />}
 
-        {view === "issues" && <IssuesView issues={issues} byId={byId} onResolve={resolveIssue} />}
+        {view === "issues" && <IssuesView issues={issues} byId={byId} onResolve={resolveIssue} onRetry={(i) => { if (i.taskId) retryTask(i.taskId); resolveIssue(i.id); }} />}
 
         {PLACEHOLDER[view] && <Placeholder icon={PLACEHOLDER[view].icon} title={PLACEHOLDER[view].title} desc={PLACEHOLDER[view].desc} />}
       </main>
@@ -696,8 +701,11 @@ const SS = {
   issueTop: { display: "flex", alignItems: "center", gap: 9 },
   issueTitle: { fontSize: 12.5, fontWeight: 700, color: "#e8edff", flex: 1 },
   resolveBtn: { display: "flex", alignItems: "center", gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "6px 10px", borderRadius: 7, border: "1px solid rgba(74,222,128,.4)", background: "rgba(74,222,128,.1)", color: "#bbf7d0", cursor: "pointer", fontFamily: MONO, flexShrink: 0 },
+  dismissBtn: { display: "flex", alignItems: "center", gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "6px 10px", borderRadius: 7, border: "1px solid #243358", background: "transparent", color: "#9db0c8", cursor: "pointer", fontFamily: MONO, flexShrink: 0 },
   issueDetail: { margin: "9px 0 0", fontFamily: MONO, fontSize: 10.5, color: "#9db0c8", lineHeight: 1.5, whiteSpace: "pre-wrap", background: "#070a14", border: "1px solid #161f3a", borderRadius: 7, padding: "8px 10px", maxHeight: 160, overflowY: "auto" },
-  issueMeta: { fontSize: 9.5, color: "#5e7088", marginTop: 8 },
+  issueBottom: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 9, flexWrap: "wrap" },
+  issueActions: { display: "flex", gap: 7 },
+  issueMeta: { fontSize: 9.5, color: "#5e7088" },
   main: { flex: 1, minWidth: 0, padding: 18, background: "radial-gradient(120% 90% at 50% -10%, #0e1430, #0a0e1a 60%)", overflowY: "auto", maxHeight: "calc(100vh - 32px)" },
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
