@@ -33,5 +33,6 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      # Flash has a free tier; gemini-2.5-pro is paid-only (needs billing).
       - key: GEMINI_MODEL
-        value: gemini-2.5-pro
+        value: gemini-2.5-flash

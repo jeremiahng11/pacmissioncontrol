@@ -9,17 +9,35 @@ import { GEMINI_API_KEY, GEMINI_MODEL } from "./config.js";
 const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 export const usingGemini = !!ai;
 
+function isRateLimit(msg) {
+  return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
+}
+
 async function generate(system, prompt, { json = false, temperature = 0.7 } = {}) {
-  const res = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: prompt,
-    config: {
-      systemInstruction: system,
-      temperature,
-      ...(json ? { responseMimeType: "application/json" } : {}),
-    },
-  });
-  return (res.text || "").trim();
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          systemInstruction: system,
+          temperature,
+          ...(json ? { responseMimeType: "application/json" } : {}),
+        },
+      });
+      return (res.text || "").trim();
+    } catch (e) {
+      const msg = e?.message || String(e);
+      // Retry once on transient per-minute rate limits (helps Flash free tier).
+      if (attempt === 0 && isRateLimit(msg)) {
+        const m = msg.match(/retry in ([\d.]+)s/i) || msg.match(/"retryDelay":\s*"(\d+)s"/);
+        const delay = Math.min(20000, Math.max(3000, (m ? parseFloat(m[1]) : 6) * 1000));
+        await wait(delay);
+        continue;
+      }
+      throw e;
+    }
+  }
 }
 
 const SIM = {
@@ -48,7 +66,11 @@ export async function runWork(agent, task, memoryText = "") {
     );
     return out || `Done: ${task.title}.`;
   } catch (e) {
-    return `⚠️ ${agent.name} could not complete via Gemini: ${e.message}`;
+    const msg = e?.message || String(e);
+    if (isRateLimit(msg)) {
+      return `⚠️ Gemini quota exceeded for ${GEMINI_MODEL}. Free tier doesn't cover Pro — set GEMINI_MODEL=gemini-2.5-flash, or enable billing for Pro.`;
+    }
+    return `⚠️ ${agent.name} could not complete via Gemini: ${msg.slice(0, 200)}`;
   }
 }
 
