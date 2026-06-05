@@ -1,12 +1,11 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 # One Node web service (React app + REST + WebSocket + CTO orchestrator) plus a
-# managed Postgres, both in Singapore so the internal DB connection works.
-# Render free tier allows only ONE Postgres per account — if applying fails with
-# "more than one active free tier database", delete your other free DB first.
+# managed Postgres (Basic tier, paid — persistent, no free-tier expiry), both in
+# Singapore so the internal DB connection works.
 # Our tables live in a dedicated `mission_control` schema.
 databases:
   - name: mission-control-db
-    plan: free
+    plan: basic-256mb
     region: singapore
 
 services:
