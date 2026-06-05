@@ -496,6 +496,7 @@ export default function AgentOffice() {
   const jayQueue = useRef([]);
   const lastEvtRef = useRef(0);
   const jayTimers = useRef([]);
+  const jayPosRef = useRef(null);
 
   const agents = AGENTS.map((s) => ({
     ...s,
@@ -512,49 +513,61 @@ export default function AgentOffice() {
 
   // Jay Jay patrols the office while on duty — wanders between rooms, pauses,
   // and breaks off to deliver a task to an agent when one is assigned.
-  // A point on a room's floor (xFrac 0..1 across the room width).
-  const floorPoint = (room, xFrac = 0.5) => {
+  // A point within a room (xFrac/yFrac across width/height) — lets Jay Jay
+  // drift left/right AND up/down for natural movement.
+  const spot = (room, xFrac, yFrac) => {
     const cont = roomsRef.current;
     if (!cont) return null;
     const el = cont.querySelector(`[data-room="${room}"]`);
     if (!el) return null;
     const cr = cont.getBoundingClientRect(), r = el.getBoundingClientRect();
-    return { x: r.left - cr.left + r.width * xFrac, y: r.top - cr.top + r.height * 0.6 };
+    return { x: r.left - cr.left + r.width * xFrac, y: r.top - cr.top + r.height * yFrac };
   };
-  const faceX = (j, c) => (c.x < (j.coords?.x ?? c.x) - 3 ? "left" : c.x > (j.coords?.x ?? c.x) + 3 ? "right" : j.facing);
+  const faceX = (prev, c) => (!prev ? "right" : c.x < prev.x - 3 ? "left" : c.x > prev.x + 3 ? "right" : null);
+  const travelDur = (prev, c) => (prev ? Math.min(1.8, Math.max(0.5, Math.hypot(c.x - prev.x, c.y - prev.y) / 230)) : 0.2);
+  const goTo = (c, say) => {
+    const prev = jayPosRef.current;
+    jayPosRef.current = c;
+    const dur = travelDur(prev, c);
+    setJay((j) => ({ coords: c, facing: faceX(prev, c) || j.facing, say: say ?? null, dur }));
+    return dur;
+  };
 
   const jayStep = () => {
     const T = jayTimers.current;
     const item = jayQueue.current.shift();
     if (item) {
-      // A task is ready: leave HQ, walk to the agent's room, announce it,
-      // then head back to HQ and resume pacing.
-      const c = floorPoint(item.room, 0.5);
-      if (c) {
-        setJay((j) => ({ coords: c, facing: faceX(j, c), say: `→ ${item.name}: ${item.task}` }));
-        setSay({ room: item.room, text: "on it!" });
-      }
+      // Task ready: leave HQ, walk to the agent's room, announce it, return.
+      const c = spot(item.room, 0.4 + Math.random() * 0.2, 0.5 + Math.random() * 0.16);
+      if (!c) { T.push(setTimeout(jayStep, 1200)); return; }
+      const dur = goTo(c, `→ ${item.name}: ${item.task}`);
+      setSay({ room: item.room, text: "on it!" });
       T.push(setTimeout(() => {
         setJay((j) => ({ ...j, say: null }));
         setSay((s) => (s && s.room === item.room ? null : s));
-        const home = floorPoint("COMMAND HQ", 0.5);
-        if (home) setJay((j) => ({ ...j, coords: home, facing: faceX(j, home) }));
-        T.push(setTimeout(jayStep, 1500));
-      }, 2600));
+        const home = spot("COMMAND HQ", 0.35 + Math.random() * 0.3, 0.5 + Math.random() * 0.16);
+        if (home) goTo(home);
+        T.push(setTimeout(jayStep, 1600));
+      }, dur * 1000 + 1700));
+    } else if (Math.random() > 0.28) {
+      // Pace around HQ: a fresh spot (varied x and y), then a pause.
+      const c = spot("COMMAND HQ", 0.15 + Math.random() * 0.7, 0.4 + Math.random() * 0.34);
+      const dur = c ? goTo(c) : 0;
+      T.push(setTimeout(jayStep, dur * 1000 + 900 + Math.random() * 2600));
     } else {
-      // No task: pace around Command HQ — move left/right, sometimes stay put.
-      if (Math.random() > 0.3) {
-        const c = floorPoint("COMMAND HQ", 0.18 + Math.random() * 0.64);
-        if (c) setJay((j) => ({ coords: c, facing: faceX(j, c), say: null }));
-      }
-      T.push(setTimeout(jayStep, 1800 + Math.random() * 3000));
+      // Sometimes just stay put for a beat.
+      T.push(setTimeout(jayStep, 1400 + Math.random() * 2400));
     }
   };
 
   // Start/stop the patrol loop with the Visual view.
   useEffect(() => {
     if (view !== "visual") return;
-    const start = setTimeout(() => { setJay((j) => (j.coords ? j : { ...j, coords: floorPoint("COMMAND HQ", 0.5) })); jayStep(); }, 200);
+    const start = setTimeout(() => {
+      const home = spot("COMMAND HQ", 0.5, 0.58);
+      if (home) { jayPosRef.current = home; setJay((j) => (j.coords ? j : { coords: home, facing: "right", say: null, dur: 0.2 })); }
+      jayStep();
+    }, 200);
     return () => { clearTimeout(start); jayTimers.current.forEach(clearTimeout); jayTimers.current = []; };
   }, [view]);
 
@@ -705,10 +718,10 @@ export default function AgentOffice() {
                 );
               })}
               {jay.coords && (
-                <div className="courier" style={{ left: jay.coords.x - 38, top: jay.coords.y - 58 }}>
+                <div className="courier" style={{ left: jay.coords.x - 38, top: jay.coords.y - 58, transition: `left ${jay.dur || 1.2}s ease-in-out, top ${jay.dur || 1.2}s ease-in-out, opacity .3s ease` }}>
                   {jay.say && <div className="courier-say">{jay.say}</div>}
                   <div className="oshadow courier-shadow" />
-                  <Octo color="#facc15" size={76} status="working" cto flip={jay.facing === "left"} />
+                  <span className="jay-bob"><Octo color="#facc15" size={76} status="working" cto flip={jay.facing === "left"} /></span>
                 </div>
               )}
             </div>
@@ -1109,6 +1122,8 @@ const CSS = `
 @keyframes busyB { 0%,12%{left:74%;} 26%,38%{left:50%;} 52%,64%{left:26%;} 80%,92%{left:50%;} 100%{left:74%;} }
 .courier { position:absolute; z-index:7; display:flex; flex-direction:column; align-items:center; pointer-events:none; transition:left 1.2s cubic-bezier(.45,.05,.3,1), top 1.2s cubic-bezier(.45,.05,.3,1), opacity .3s ease; }
 .courier-shadow { background:#facc15; }
+@keyframes jayBob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);} }
+.jay-bob { animation:jayBob 2.4s ease-in-out infinite; display:block; }
 .courier-say { position:absolute; bottom:100%; margin-bottom:4px; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; color:#fde68a; background:#070a14; border:1px solid #facc15; border-radius:6px; padding:3px 8px; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 0 10px #facc1555; }
 .agent-tag { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-family:'Press Start 2P',monospace; font-size:7px; letter-spacing:1px; opacity:.85; z-index:2; }
 .speech { position:absolute; top:10px; left:50%; transform:translateX(-50%); font-size:9px; font-family:'JetBrains Mono'; background:#070a14; border:1px solid; border-radius:6px; padding:2px 7px; z-index:4; white-space:nowrap; }
