@@ -44,7 +44,6 @@ const NAV = [
 
 const PLACEHOLDER = {
   content:  { icon: Satellite, title: "Content",  desc: "Plan and track the content your agents produce." },
-  projects: { icon: Rocket,    title: "Projects", desc: "Group missions into projects and follow their progress." },
 };
 
 const fmtCadence = (r) => {
@@ -366,6 +365,32 @@ function IssuesView({ issues, byId, onResolve, onRetry, onClearAll }) {
                   <button style={SS.dismissBtn} onClick={() => onResolve(i.id)}><Check size={12} /> Dismiss</button>
                 </div>
               </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ProjectsView({ documents, byId, onOpen, onDownload }) {
+  const projects = documents.filter((d) => d.department === "development");
+  return (
+    <div style={SS.libWrap}>
+      <h1 style={SS.h1}><Rocket size={20} /> Projects</h1>
+      <div style={SS.libSub}>Software the Development Center built. Open to review, or download the code — a single file by its real type (.html/.py/.dart…), or a <b>.zip</b> for multi-file projects.</div>
+      {projects.length === 0 && <div style={SS.queueEmpty}>No projects yet. Assign a build task to the Development Center (e.g. “build a Django todo API” or “a Flutter login screen”).</div>}
+      <div style={SS.docsList}>
+        {projects.map((d) => {
+          const who = d.agentId && byId[d.agentId];
+          return (
+            <div key={d.id} style={SS.projectRow}>
+              <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={() => onOpen(d.id)}>
+                <div style={SS.docRowHead}><span style={SS.docTitle}>{d.title}</span><span style={SS.docWhen}>{fmtWhen(d.createdAt)}</span></div>
+                <div style={SS.docMeta}>{who ? who.name : "ORBIT"} · Development Center</div>
+                <div style={SS.docSnippet}>{d.snippet}</div>
+              </div>
+              <button style={SS.downloadBtn} onClick={() => onDownload(d.id)}><Download size={13} /> DOWNLOAD</button>
             </div>
           );
         })}
@@ -750,6 +775,8 @@ export default function AgentOffice() {
 
         {view === "calendar" && <CalendarView routines={routines} onCreate={createRoutine} onToggle={(r) => updateRoutine(r.id, { enabled: !r.enabled })} onDelete={deleteRoutine} />}
 
+        {view === "projects" && <ProjectsView documents={documents} byId={byId} onOpen={openDoc} onDownload={downloadCode} />}
+
         {view === "issues" && <IssuesView issues={issues} byId={byId} onClearAll={clearIssues} onResolve={resolveIssue} onRetry={(i) => {
           if (!i.taskId) { alert("This issue has no task to retry — dismissing it."); resolveIssue(i.id); return; }
           retryTask(i.taskId)
@@ -943,6 +970,7 @@ const SS = {
   libSub: { fontSize: 11.5, color: "#7a8aa0", marginBottom: 10, lineHeight: 1.45, maxWidth: 640 },
   docsList: { display: "flex", flexDirection: "column", gap: 8 },
   docRow: { background: "#0c1226", border: "1px solid #1a2440", borderRadius: 10, padding: "11px 13px", cursor: "pointer" },
+  projectRow: { display: "flex", alignItems: "center", gap: 12, background: "#0c1226", border: "1px solid #1a2440", borderRadius: 10, padding: "11px 13px" },
   docRowHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
   docTitle: { fontSize: 13, fontWeight: 700, color: "#e8edff" },
   docWhen: { fontSize: 9.5, color: "#5e7088", flexShrink: 0 },
