@@ -100,9 +100,8 @@ const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "id
   const moving = status !== "idle";
   const dur = status === "working" || status === "command" ? "0.42s" : status === "thinking" ? "0.6s" : "0.9s";
   return (
-    <svg width={size} height={size * (16 / 13)} viewBox="0 -3 13 16" shapeRendering="crispEdges"
+    <svg width={size} height={size} viewBox="0 0 13 13" shapeRendering="crispEdges"
       style={{ overflow: "visible", display: "block", transform: flip ? "scaleX(-1)" : undefined, filter: status === "idle" ? "none" : `drop-shadow(0 0 5px ${color}66)` }}>
-      <g fill="#f5c95b"><rect x="3" y="-3" width="1" height="2" /><rect x="6" y="-3" width="1" height="2" /><rect x="9" y="-3" width="1" height="2" /><rect x="3" y="-1" width="7" height="1" /></g>
       {moving ? (
         <>
           <g className="pac-a" style={{ animationDuration: dur }}>{pacGrid(PAC_OPEN, color, 1)}</g>
@@ -257,12 +256,12 @@ function TeamView({ live, model }) {
                   <div style={SS.memberHead}>
                     <div style={SS.memberAvatar}>
                       {m.human
-                        ? <div style={SS.humanAvatar}><User size={22} color="#0b1020" /></div>
+                        ? <div style={SS.humanAvatarWrap}><Crown size={15} color="#f5c95b" style={SS.humanCrown} /><div style={SS.humanAvatar}><User size={22} color="#0b1020" /></div></div>
                         : <Octo color={m.color} size={40} status={live[m.id]?.status || "idle"} cto={m.id === "jeremiah"} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={SS.memberName}>
-                        {m.name} {m.id === "jeremiah" && <Crown size={12} color="#f5c95b" />}
+                        {m.name}
                         {badge && <span style={{ ...SS.badgeSm, color: badge[1], borderColor: `${badge[1]}66`, background: `${badge[1]}1a` }}>{badge[0]}</span>}
                       </div>
                       <div style={SS.memberRole}>{m.role}</div>
@@ -602,7 +601,7 @@ export default function AgentOffice() {
                     <div style={SS.cardHead}>
                       <div style={{ width: 36, display: "grid", placeItems: "center" }}><Octo color={a.color} size={28} status={a.status} cto={a.cto} /></div>
                       <div style={{ flex: 1 }}>
-                        <div style={SS.cardName}>{a.name} {a.cto && <Crown size={11} color="#f5c95b" />}</div>
+                        <div style={SS.cardName}>{a.name}</div>
                         <span style={{ ...SS.cardBadge, color: bc, borderColor: `${bc}66`, background: `${bc}1a` }}>{bl}</span>
                       </div>
                     </div>
@@ -859,6 +858,8 @@ const SS = {
   memberCard: { background: "#0c1226", border: "1px solid", borderRadius: 12, padding: 14 },
   memberHead: { display: "flex", alignItems: "center", gap: 11 },
   memberAvatar: { width: 44, display: "grid", placeItems: "center", flexShrink: 0 },
+  humanAvatarWrap: { position: "relative", width: 40, height: 40 },
+  humanCrown: { position: "absolute", top: -9, left: "50%", transform: "translateX(-50%)", zIndex: 1 },
   humanAvatar: { width: 40, height: 40, borderRadius: 99, background: "linear-gradient(160deg,#e8edff,#9db0c8)", display: "grid", placeItems: "center", boxShadow: "0 0 8px #e8edff55" },
   memberName: { fontSize: 14, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   memberRole: { fontSize: 10.5, color: "#8aa0c0", marginTop: 2 },
