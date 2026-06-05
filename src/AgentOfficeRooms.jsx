@@ -96,12 +96,12 @@ const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW
 const PAC_OPEN = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXX..", "XXXXXXXXX....", "XXXXXX.......", "XXXXXXXXX....", "XXXXXXXXXXX..", "XXXXXXXXXXXXX", ".XXXXXXXXXXX.", "..XXXXXXXXX..", "....XXXXX...."];
 const PAC_CLOSED = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXX.", "XXXXXXXXXX...", "XXXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", ".XXXXXXXXXXX.", "..XXXXXXXXX..", "....XXXXX...."];
 const pacGrid = (rows, color, dim) => rows.map((row, r) => row.split("").map((c, x) => c === "X" ? <rect key={`${r}-${x}`} x={x} y={r} width="1" height="1" fill={color} opacity={dim} /> : null));
-const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "idle" }) {
+const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "idle", flip = false }) {
   const moving = status !== "idle";
   const dur = status === "working" || status === "command" ? "0.42s" : status === "thinking" ? "0.6s" : "0.9s";
   return (
     <svg width={size} height={size * (16 / 13)} viewBox="0 -3 13 16" shapeRendering="crispEdges"
-      style={{ overflow: "visible", display: "block", filter: status === "idle" ? "none" : `drop-shadow(0 0 5px ${color}66)` }}>
+      style={{ overflow: "visible", display: "block", transform: flip ? "scaleX(-1)" : undefined, filter: status === "idle" ? "none" : `drop-shadow(0 0 5px ${color}66)` }}>
       <g fill="#f5c95b"><rect x="3" y="-3" width="1" height="2" /><rect x="6" y="-3" width="1" height="2" /><rect x="9" y="-3" width="1" height="2" /><rect x="3" y="-1" width="7" height="1" /></g>
       {moving ? (
         <>
@@ -111,15 +111,16 @@ const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "id
       ) : (
         <g>{pacGrid(PAC_OPEN, color, 0.85)}</g>
       )}
-      <rect x="7" y="2" width="1.6" height="1.6" fill="#0b1020" />
+      <rect x="6.6" y="1" width="2.3" height="2.7" fill="#fff" />
+      <rect x="7.5" y="1.7" width="1.2" height="1.7" fill="#0b1020" />
     </svg>
   );
 });
 
 /* --- pixel octopus sprite (memoized) --- */
 const OCTO = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XX.XXX.XXX.XX", "X..X.X.X.X..X"];
-const Octo = memo(function Octo({ color, size = 60, status = "idle", cto = false }) {
-  if (cto) return <PacMan color={color} size={size} status={status} />;
+const Octo = memo(function Octo({ color, size = 60, status = "idle", cto = false, flip = false }) {
+  if (cto) return <PacMan color={color} size={size} status={status} flip={flip} />;
   const work = status === "working" || status === "command", think = status === "thinking", idle = status === "idle";
   const dim = idle ? 0.6 : 1, look = think ? -1.1 : 0;
   return (
@@ -433,11 +434,12 @@ export default function AgentOffice() {
     const hq = centerOf("COMMAND HQ"), tgt = centerOf(item.room);
     if (!hq || !tgt) { setCourier(null); runningRef.current = false; return; }
     const T = timersRef.current;
-    setCourier({ ...item, coords: hq, showSpeech: false });
+    const goingLeft = tgt.x < hq.x; // face the direction of travel
+    setCourier({ ...item, coords: hq, showSpeech: false, facing: goingLeft ? "left" : "right" });
     setSay({ room: item.room });
     T.push(setTimeout(() => setCourier((c) => c && { ...c, coords: tgt }), 90));
     T.push(setTimeout(() => setCourier((c) => c && { ...c, showSpeech: true }), 1350));
-    T.push(setTimeout(() => { setCourier((c) => c && { ...c, showSpeech: false, coords: hq }); setSay((s) => (s && s.room === item.room ? null : s)); }, 2800));
+    T.push(setTimeout(() => { setCourier((c) => c && { ...c, showSpeech: false, coords: hq, facing: goingLeft ? "right" : "left" }); setSay((s) => (s && s.room === item.room ? null : s)); }, 2800));
     T.push(setTimeout(step, 3950));
   };
   const runQueue = () => { if (runningRef.current) return; runningRef.current = true; step(); };
@@ -579,10 +581,10 @@ export default function AgentOffice() {
                 );
               })}
               {courier && (
-                <div className="courier" style={{ left: courier.coords.x - 30, top: courier.coords.y - 50 }}>
+                <div className="courier" style={{ left: courier.coords.x - 38, top: courier.coords.y - 58 }}>
                   {courier.showSpeech && <div className="courier-say">→ {courier.name}: {courier.task}</div>}
                   <div className="oshadow courier-shadow" />
-                  <Octo color="#facc15" size={58} status="working" cto />
+                  <Octo color="#facc15" size={76} status="working" cto flip={courier.facing === "left"} />
                 </div>
               )}
             </div>
@@ -771,7 +773,7 @@ const SS = {
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
-  toastWrap: { position: "fixed", top: 18, right: 18, zIndex: 50, display: "flex", flexDirection: "column", gap: 8, width: 360, maxWidth: "calc(100vw - 36px)" },
+  toastWrap: { position: "fixed", left: 14, bottom: 110, zIndex: 60, display: "flex", flexDirection: "column-reverse", gap: 8, width: 320, maxWidth: "calc(100vw - 28px)" },
   autoBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.12)", border: "1px solid rgba(234,179,8,.4)", borderRadius: 10, padding: "10px 12px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.45)" },
   idleBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#cfe3d8", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 13px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.5)" },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },

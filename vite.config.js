@@ -30,6 +30,11 @@ export default defineConfig({
         navigateFallback: "/index.html",
         // Never let the SW shadow auth/API/WS routes.
         navigateFallbackDenylist: [/^\/api/, /^\/ws/, /^\/login/],
+        // Take over and drop stale caches immediately so new deploys apply
+        // without the old bundle lingering.
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
       },
     }),
   ],

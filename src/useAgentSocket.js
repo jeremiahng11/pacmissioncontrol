@@ -97,7 +97,10 @@ export function useAgentSocket() {
   const openDocument = useCallback((id) => api.document(id), []);
   const deleteDocument = useCallback((id) => api.deleteDocument(id).catch(() => {}), []);
   const deleteMemory = useCallback((scope) => api.deleteMemory(scope).catch(() => {}), []);
-  const resolveIssue = useCallback((id) => api.resolveIssue(id).catch(() => {}), []);
+  const resolveIssue = useCallback((id) => {
+    setIssues((p) => p.filter((i) => i.id !== id)); // optimistic: clear from the list immediately
+    return api.resolveIssue(id).catch(() => {});
+  }, []);
 
   return { agents, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue };
 }
