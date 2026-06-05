@@ -97,8 +97,19 @@ export async function initStore() {
     await migrate();
   }
   await loadAgents();
-  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); }
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); reconcileIssues(); }
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
+}
+
+// Drop issues whose task is gone or no longer failing (e.g. it later completed),
+// so stale issues don't linger across restarts.
+function reconcileIssues() {
+  const liveIds = new Set(state.tasks.keys());
+  const stale = state.issues.filter((i) => i.taskId && !liveIds.has(i.taskId));
+  if (!stale.length) return;
+  state.issues = state.issues.filter((i) => !i.taskId || liveIds.has(i.taskId));
+  if (pool) pool.query("DELETE FROM issues WHERE task_id = ANY($1::text[])", [stale.map((i) => i.taskId)]).catch((e) => console.error("[store] reconcileIssues", e.message));
+  console.log(`[store] cleared ${stale.length} stale issue(s)`);
 }
 
 async function migrate() {
@@ -317,7 +328,7 @@ export function resolveIssue(id) {
   const idx = state.issues.findIndex((x) => x.id === id);
   if (idx < 0) return false;
   state.issues.splice(idx, 1); // dismiss = delete permanently
-  if (pool) pool.query("DELETE FROM issues WHERE id=$1", [id]).catch(() => {});
+  if (pool) pool.query("DELETE FROM issues WHERE id=$1", [id]).catch((e) => console.error("[store] resolveIssue DB", e.message));
   bus.emit("issue", { id, resolved: true });
   return true;
 }
@@ -331,7 +342,7 @@ function deleteIssuesForTask(taskId) {
 export function clearIssues() {
   const n = state.issues.length;
   state.issues = [];
-  if (pool) pool.query("DELETE FROM issues").catch(() => {});
+  if (pool) pool.query("DELETE FROM issues").catch((e) => console.error("[store] clearIssues DB", e.message));
   bus.emit("issuesReset", []);
   return n;
 }
