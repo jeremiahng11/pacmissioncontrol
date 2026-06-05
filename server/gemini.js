@@ -79,11 +79,15 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const fileBlock = media && media.length
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
     : "";
+  // Development tasks: emit each file with a marker so it can be zipped.
+  const codeBlock = agent.department === "development"
+    ? `\n\nIf you produce a multi-file project or app, output EACH file as a marker line "===== FILE: relative/path.ext =====" immediately followed by its fenced code block, so the code can be packaged into a downloadable .zip. Keep explanations as normal prose between files.`
+    : "";
   const out = await generate(
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
       `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
       `No preamble like "Here is" — start directly with the title heading.`,
-    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fileBlock}`,
+    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fileBlock}${codeBlock}`,
     { model, media }
   );
   return out || `Done: ${task.title}.`;

@@ -453,14 +453,16 @@ export default function AgentOffice() {
   const [autoDismissed, setAutoDismissed] = useState(false);
   const [files, setFiles] = useState([]);
 
-  const downloadDoc = (id) => {
+  const downloadFrom = (href) => {
     const a = document.createElement("a");
-    a.href = `/api/documents/${id}/download`;
+    a.href = href;
     a.rel = "noopener";
     document.body.appendChild(a);
     a.click();
     a.remove();
   };
+  const downloadDoc = (id) => downloadFrom(`/api/documents/${id}/download`);
+  const downloadZip = (id) => downloadFrom(`/api/documents/${id}/zip`);
 
   const roomsRef = useRef(null);
   const queueRef = useRef([]);
@@ -803,6 +805,7 @@ export default function AgentOffice() {
             <div style={SS.resultBox}>{doc.content}</div>
             <div style={SS.modalActions}>
               <button style={SS.downloadBtn} onClick={() => downloadDoc(doc.id)}><Download size={13} /> DOWNLOAD .DOC</button>
+              {/```/.test(doc.content || "") && <button style={SS.downloadBtn} onClick={() => downloadZip(doc.id)}><Download size={13} /> DOWNLOAD .ZIP</button>}
               <button style={SS.delBtn} onClick={() => { if (confirm("Delete this document?")) { deleteDocument(doc.id); setDoc(null); } }}><Trash2 size={13} /> DELETE</button>
             </div>
           </div>

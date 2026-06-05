@@ -27,6 +27,7 @@ import {
   verifyCredentials, setSession, clearSession, isAuthed, isAuthedFromHeader, loginPage,
 } from "./auth.js";
 import { toWordDoc, safeFilename } from "./wordExport.js";
+import { extractFiles, buildZip } from "./zipExport.js";
 import { DEPARTMENTS } from "./agents.js";
 import { getAgent } from "./store.js";
 import { usingGemini } from "./gemini.js";
@@ -148,6 +149,15 @@ app.get("/api/documents/:id/download", (req, reply) => {
     .header("Content-Type", "application/msword")
     .header("Content-Disposition", `attachment; filename="${safeFilename(d.title)}"`)
     .send(html);
+});
+
+app.get("/api/documents/:id/zip", async (req, reply) => {
+  const d = getDocument(req.params.id);
+  if (!d) return reply.code(404).send({ error: "not found" });
+  const files = extractFiles(d.content || "");
+  const buf = await buildZip(files, d.title, d.content);
+  const name = safeFilename(d.title).replace(/\.doc$/, "");
+  reply.header("Content-Type", "application/zip").header("Content-Disposition", `attachment; filename="${name}.zip"`).send(buf);
 });
 
 app.delete("/api/documents/:id", (req, reply) => {
