@@ -94,20 +94,21 @@ const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW
 
 /* --- Pac-Man sprite for the CTO (Jay Jay) --- */
 const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "idle" }) {
-  const dur = status === "working" || status === "command" ? "0.34s" : status === "thinking" ? "0.5s" : "0.9s";
-  const open = "M50,50 L89.8,27 A46,46 0 1 1 89.8,73 Z";
-  const closed = "M50,50 L96,48.4 A46,46 0 1 1 96,51.6 Z";
+  const dur = status === "working" || status === "command" ? "0.34s" : status === "thinking" ? "0.5s" : "0.95s";
+  // Both states keep a clearly-visible wedge so it always reads as Pac-Man.
+  const open = "M50,50 L87.7,23.6 A46,46 0 1 1 87.7,76.4 Z";   // mouth wide (~70deg)
+  const closed = "M50,50 L95.3,42 A46,46 0 1 1 95.3,58 Z";      // mouth narrow (~20deg)
   return (
     <svg width={size} height={size} viewBox="-8 -18 116 124" shapeRendering="geometricPrecision"
-      style={{ overflow: "visible", display: "block", filter: status === "idle" ? "none" : `drop-shadow(0 0 6px ${color}aa)` }}>
+      style={{ overflow: "visible", display: "block" }}>
       <g fill="#f5c95b">
         <rect x="27" y="-14" width="7" height="15" /><rect x="46" y="-17" width="7" height="18" /><rect x="65" y="-14" width="7" height="15" />
         <rect x="25" y="0" width="50" height="7" rx="1" />
       </g>
-      <path fill={color} opacity={status === "idle" ? 0.7 : 1}>
+      <path fill={color} stroke="#00000022" strokeWidth="1" opacity={status === "idle" ? 0.78 : 1}>
         <animate attributeName="d" dur={dur} repeatCount="indefinite" values={`${open};${closed};${open}`} />
       </path>
-      <circle cx="46" cy="24" r="5" fill="#0b1020" />
+      <circle cx="45" cy="23" r="5" fill="#0b1020" />
     </svg>
   );
 });
