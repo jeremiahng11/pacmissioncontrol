@@ -29,7 +29,9 @@ async function generate(system, prompt, { json = false, temperature = 0.7 } = {}
     } catch (e) {
       const msg = e?.message || String(e);
       // Retry once on transient per-minute rate limits (helps Flash free tier).
-      if (attempt === 0 && isRateLimit(msg)) {
+      // Skip retry on hard caps (limit:0 / per-day) — retrying just wastes time.
+      const hardCap = /limit:\s*0|PerDay|per day|FreeTier/i.test(msg);
+      if (attempt === 0 && isRateLimit(msg) && !hardCap) {
         const m = msg.match(/retry in ([\d.]+)s/i) || msg.match(/"retryDelay":\s*"(\d+)s"/);
         const delay = Math.min(20000, Math.max(3000, (m ? parseFloat(m[1]) : 6) * 1000));
         await wait(delay);
@@ -56,22 +58,16 @@ export async function runWork(agent, task, memoryText = "") {
     const cont = memoryText ? " (continuing from earlier notes)" : "";
     return `Done: ${task.title}${cont}.\n\n(Simulated deliverable — set GEMINI_API_KEY to have ${agent.name} produce real work.)`;
   }
-  try {
-    const memBlock = memoryText
-      ? `\n\nNOTES FROM EARLIER WORK (build on these, continue and add to them, don't repeat):\n${memoryText}`
-      : "";
-    const out = await generate(
-      `${agent.persona} Produce the deliverable directly and concisely (short paragraphs or a tight list). No preamble.`,
-      `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}`
-    );
-    return out || `Done: ${task.title}.`;
-  } catch (e) {
-    const msg = e?.message || String(e);
-    if (isRateLimit(msg)) {
-      return `⚠️ Gemini quota exceeded for ${GEMINI_MODEL}. Free tier doesn't cover Pro — set GEMINI_MODEL=gemini-2.5-flash, or enable billing for Pro.`;
-    }
-    return `⚠️ ${agent.name} could not complete via Gemini: ${msg.slice(0, 200)}`;
-  }
+  // Throws on API error — the orchestrator turns that into a blocked task +
+  // an Issue (it must NOT become a "done" deliverable).
+  const memBlock = memoryText
+    ? `\n\nNOTES FROM EARLIER WORK (build on these, continue and add to them, don't repeat):\n${memoryText}`
+    : "";
+  const out = await generate(
+    `${agent.persona} Produce the deliverable directly and concisely (short paragraphs or a tight list). No preamble.`,
+    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}`
+  );
+  return out || `Done: ${task.title}.`;
 }
 
 /* One-line memory note so future related tasks can continue the work. */
@@ -89,18 +85,19 @@ export async function summarizeForMemory(agent, task, result) {
   }
 }
 
-/* CTO reviews the deliverable. */
+/* CTO reviews the deliverable. Throws on API error (-> Issue); a bad/parse
+   response just defaults to approved rather than blocking the pipeline. */
 export async function runReview(task, result) {
   if (!ai) {
     await wait(400 + Math.random() * 500);
     return { complete: true, note: "approved (sim)" };
   }
+  const txt = await generate(
+    'You are JAY JAY, the CTO, reviewing a deliverable. Decide if it adequately completes the task. Respond ONLY as JSON: {"complete": boolean, "note": string up to 10 words}.',
+    `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${result}`,
+    { json: true, temperature: 0.2 }
+  );
   try {
-    const txt = await generate(
-      'You are JEREMIAH, the CTO, reviewing a deliverable. Decide if it adequately completes the task. Respond ONLY as JSON: {"complete": boolean, "note": string up to 10 words}.',
-      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${result}`,
-      { json: true, temperature: 0.2 }
-    );
     const p = JSON.parse(txt);
     return { complete: !!p.complete, note: String(p.note || "").slice(0, 120) || "reviewed" };
   } catch {
@@ -116,7 +113,7 @@ export async function generateTask(agent) {
   }
   try {
     const txt = await generate(
-      `You are JEREMIAH, the CTO, assigning ONE small self-contained task to ${agent.name} (${agent.role}, ${agent.room}). It must be completable by an LLM in a single shot with no external tools. Respond ONLY as JSON: {"title": string up to 8 words, "prompt": string}.`,
+      `You are JAY JAY, the CTO, assigning ONE small self-contained task to ${agent.name} (${agent.role}, ${agent.room}). It must be completable by an LLM in a single shot with no external tools. Respond ONLY as JSON: {"title": string up to 8 words, "prompt": string}.`,
       `Assign a useful task to ${agent.name}.`,
       { json: true, temperature: 1.0 }
     );

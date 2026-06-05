@@ -28,7 +28,11 @@
       "Read(//tmp/**)",
       "Bash(cp \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\" /tmp/vid/rec.mov 2>&1 && echo \"copied OK\" && ls -la /tmp/vid/rec.mov)",
       "Bash(cp \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\" /tmp/vid/rec.mov && echo \"copied OK\" && ls -la /tmp/vid/rec.mov)",
-      "WebFetch(domain:render.com)"
+      "WebFetch(domain:render.com)",
+      "Bash(perl -pi -e 's/\\\\bJeremiah\\\\b/Jay Jay/g' server/orchestrator.js)",
+      "Bash(perl -pi -e 's/You are JEREMIAH/You are JAY JAY/g' server/gemini.js)",
+      "Bash(perl -pi -e 's/\\\\bJeremiah\\\\b/Jay Jay/g' src/AgentOfficeRooms.jsx)",
+      "Bash(perl -pi -e 's/name: \"Jay Jay Ng\"/name: \"Jeremiah Ng\"/' src/AgentOfficeRooms.jsx)"
     ],
     "additionalDirectories": [
       "/Users/jeremiah/Desktop",

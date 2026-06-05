@@ -24,6 +24,7 @@ export const api = {
   createTask: (t) => req("/api/tasks", { method: "POST", body: JSON.stringify(t) }),
   deleteTask: (id) => req(`/api/tasks/${id}`, { method: "DELETE" }),
   clearTasks: (scope) => req("/api/tasks/clear", { method: "POST", body: JSON.stringify({ scope }) }),
+  resolveIssue: (id) => req(`/api/issues/${id}/resolve`, { method: "POST" }),
   control: (action, extra = {}) =>
     req("/api/control", { method: "POST", body: JSON.stringify({ action, ...extra }) }),
   logout: () => req("/api/logout", { method: "POST" }),

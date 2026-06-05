@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
 /* ------------------------------------------------------------------ *
  *  MISSION CONTROL — AGENT OFFICE
  *  Live: agents render from {status, task} over the WebSocket. When the
- *  CTO assigns a task, Jeremiah walks across the office to the agent's
+ *  CTO assigns a task, Jay Jay walks across the office to the agent's
  *  room to deliver it, then returns. Heavy room art and sprites are
  *  memoized so frequent socket updates don't re-render (and flicker).
  * ------------------------------------------------------------------ */
 
 const AGENTS = [
-  { id: "jeremiah", name: "JEREMIAH", role: "CTO · Command Core", room: "COMMAND HQ",  department: "command",     color: "#a855f7", cto: true },
+  { id: "jeremiah", name: "JAY JAY", role: "CTO · Command Core", room: "COMMAND HQ",  department: "command",     color: "#a855f7", cto: true },
   { id: "scout",    name: "SCOUT",    role: "Researcher",         room: "OBSERVATORY",  department: "observatory", color: "#38bdf8" },
   { id: "warden",   name: "WARDEN",   role: "Sentinel",           room: "SECURITY",     department: "security",    color: "#fb5570" },
   { id: "scribe",   name: "SCRIBE",   role: "Writer",             room: "RESEARCH LAB", department: "research_lab",color: "#f472b6" },
@@ -58,7 +58,7 @@ const TEAM = [
       desc: "Sets the direction and priorities, reviews the agents' work, and assigns the missions. The human in command." },
   ]},
   { section: "ORCHESTRATOR", members: [
-    { id: "jeremiah", name: "JEREMIAH", role: "CTO · Command Core", color: "#a855f7", cadence: "Always on",
+    { id: "jeremiah", name: "JAY JAY", role: "CTO · Command Core", color: "#a855f7", cadence: "Always on",
       desc: "The central brain. Routes every task to the right department, watches the work, verifies completion, and assigns the next." },
   ]},
   { section: "DEPARTMENTS", members: [
@@ -76,17 +76,21 @@ const TEAM = [
 ];
 
 const ROOMS = ["OBSERVATORY", "COMMAND HQ", "SECURITY", "RESEARCH LAB", "WORKSHOP", "ARCHIVE"];
+const ROOM_H = 200; // uniform room height (matches Command HQ)
 const META = {
-  "OBSERVATORY":  { cls: "r-obs",  h: 172, walk: "busyA" },
-  "COMMAND HQ":   { cls: "r-hq",   h: 200, walk: "busyB" },
-  "SECURITY":     { cls: "r-sec",  h: 172, walk: "busyB" },
-  "RESEARCH LAB": { cls: "r-lab",  h: 158, walk: "busyA" },
-  "WORKSHOP":     { cls: "r-shop", h: 150, walk: "busyB" },
-  "ARCHIVE":      { cls: "r-arc",  h: 172, walk: "busyA" },
+  "OBSERVATORY":  { cls: "r-obs",  h: ROOM_H, walk: "busyA" },
+  "COMMAND HQ":   { cls: "r-hq",   h: ROOM_H, walk: "busyB" },
+  "SECURITY":     { cls: "r-sec",  h: ROOM_H, walk: "busyB" },
+  "RESEARCH LAB": { cls: "r-lab",  h: ROOM_H, walk: "busyA" },
+  "WORKSHOP":     { cls: "r-shop", h: ROOM_H, walk: "busyB" },
+  "ARCHIVE":      { cls: "r-arc",  h: ROOM_H, walk: "busyA" },
 };
+// Display labels (room keys stay stable internally).
+const ROOM_LABEL = { "WORKSHOP": "DEVELOPMENT CENTER", "ARCHIVE": "ADMIN" };
+const roomLabel = (r) => ROOM_LABEL[r] || r;
 
-const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570" };
-const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED" };
+const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570", blocked: "#fb923c" };
+const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED", blocked: "ISSUE" };
 
 /* --- pixel octopus sprite (memoized) --- */
 const OCTO = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XX.XXX.XXX.XX", "X..X.X.X.X..X"];
@@ -185,7 +189,7 @@ const Room = memo(function Room({ room, name, color, cto, status, task, departme
   const busy = status === "working" || status === "command";
   return (
     <div data-room={room} className={`room ${cls}`} style={{ "--rc": color }} onClick={() => !cto && onPick(department)}>
-      <div className="room-top"><span className="room-name">{room}</span><span className="room-dots"><i /><i /><i /></span></div>
+      <div className="room-top"><span className="room-name">{roomLabel(room)}</span><span className="room-dots"><i /><i /><i /></span></div>
       <div className="scene" style={{ height: h }}>
         <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={color} work={busy} /></svg>
         {sayHere && !cto && <div className="speech" style={{ borderColor: color, color }}>on it!</div>}
@@ -299,6 +303,34 @@ function MemoryView({ memory }) {
   );
 }
 
+function IssuesView({ issues, byId, onResolve }) {
+  const KIND = { quota: ["QUOTA", "#fb923c"], auth: ["AUTH", "#fb5570"], review: ["REVIEW", "#eab308"], error: ["ERROR", "#fb5570"] };
+  return (
+    <div style={SS.libWrap}>
+      <h1 style={SS.h1}><AlertTriangle size={20} color="#fb923c" /> Issues</h1>
+      <div style={SS.libSub}>Problems Jay Jay couldn't resolve on its own and escalated to you (Group CTO) — API/quota, auth, or tasks that failed. Blocked tasks are not re-queued until you resolve the issue.</div>
+      {issues.length === 0 && <div style={SS.queueEmpty}>No open issues. Everything's running clean. ✓</div>}
+      <div style={SS.docsList}>
+        {issues.map((i) => {
+          const [kl, kc] = KIND[i.kind] || ["ISSUE", "#fb923c"];
+          const who = i.agentId && byId[i.agentId];
+          return (
+            <div key={i.id} style={{ ...SS.issueRow, borderColor: `${kc}55` }}>
+              <div style={SS.issueTop}>
+                <span style={{ ...SS.pill, color: kc, borderColor: `${kc}66`, background: `${kc}1a` }}>{kl}</span>
+                <span style={SS.issueTitle}>{i.title}</span>
+                <button style={SS.resolveBtn} onClick={() => onResolve(i.id)}><Check size={12} /> Resolve</button>
+              </div>
+              {i.detail && <pre style={SS.issueDetail}>{i.detail}</pre>}
+              <div style={SS.issueMeta}>{who ? `${who.name} · ` : ""}{fmtWhen(i.createdAt)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Placeholder({ icon: Icon, title, desc }) {
   return (
     <div style={SS.placeholder}>
@@ -311,7 +343,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, resolveIssue } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -339,7 +371,7 @@ export default function AgentOffice() {
   const onPick = useCallback((department) => setForm((f) => ({ ...f, department })), []);
   const openDoc = useCallback((id) => { openDocument(id).then(setDoc).catch(() => {}); }, [openDocument]);
 
-  // Courier: Jeremiah walks Command HQ -> agent room -> back. One trip at a
+  // Courier: Jay Jay walks Command HQ -> agent room -> back. One trip at a
   // time; trips chain without dropping the sprite, so HQ never flickers.
   const centerOf = (room) => {
     const cont = roomsRef.current;
@@ -435,6 +467,9 @@ export default function AgentOffice() {
           })}
         </nav>
 
+        <button onClick={() => setView("issues")} style={{ ...SS.issuesBadge, ...(issues.length ? {} : SS.issuesBadgeClean), ...(view === "issues" ? SS.issuesBadgeActive : {}) }}>
+          <AlertTriangle size={13} /> {issues.length ? `${issues.length} Issue${issues.length > 1 ? "s" : ""}` : "No issues"}
+        </button>
         <button onClick={logout} style={SS.sideLogout}><LogOut size={14} /> Logout</button>
       </aside>
 
@@ -453,11 +488,11 @@ export default function AgentOffice() {
 
             {settings.autonomous ? (
               <div style={SS.autoBanner}>
-                <Bot size={14} /> <b>AUTO mode is ON</b> — Jeremiah is generating its own tasks (the demo). These are real Gemini calls. Turn <b>AUTO OFF</b> to run only the tasks you assign.
+                <Bot size={14} /> <b>AUTO mode is ON</b> — Jay Jay is generating its own tasks (the demo). These are real Gemini calls. Turn <b>AUTO OFF</b> to run only the tasks you assign.
               </div>
             ) : activeTasks.length === 0 ? (
               <div style={SS.idleBanner}>
-                Office idle — assign a task in the <b>Tasks</b> tab and Jeremiah will dispatch it. (Or press <b>AUTO ON</b> for the self-running demo.)
+                Office idle — assign a task in the <b>Tasks</b> tab and Jay Jay will dispatch it. (Or press <b>AUTO ON</b> for the self-running demo.)
               </div>
             ) : null}
 
@@ -512,7 +547,7 @@ export default function AgentOffice() {
               <div style={SS.tasksCompose}>
                 <div style={SS.secTitle}>ASSIGN A TASK</div>
                 {composer}
-                <div style={SS.composeHint}>Pick a department (or “Any”) and Jeremiah routes it to the right agent.</div>
+                <div style={SS.composeHint}>Pick a department (or “Any”) and Jay Jay routes it to the right agent.</div>
               </div>
               <div style={SS.tasksList}>
                 <div style={SS.tasksListHead}>
@@ -531,7 +566,7 @@ export default function AgentOffice() {
                 )}
                 {(() => {
                   const shown = taskList.filter((t) => taskFilter === "all" ? true : taskFilter === "mine" ? t.createdBy === "user" : t.createdBy !== "user");
-                  if (!shown.length) return <div style={SS.queueEmpty}>{taskFilter === "mine" ? "You haven't assigned any tasks yet — use the composer on the left." : taskFilter === "auto" ? "No auto-generated tasks (AUTO is off or idle)." : "No tasks yet. Add one, or let Jeremiah run the office in Visual."}</div>;
+                  if (!shown.length) return <div style={SS.queueEmpty}>{taskFilter === "mine" ? "You haven't assigned any tasks yet — use the composer on the left." : taskFilter === "auto" ? "No auto-generated tasks (AUTO is off or idle)." : "No tasks yet. Add one, or let Jay Jay run the office in Visual."}</div>;
                   return shown.map((t) => {
                     const col = STATUS_COLOR[t.status] || "#64786d";
                     const mine = t.createdBy === "user";
@@ -556,6 +591,8 @@ export default function AgentOffice() {
         {view === "docs" && <DocsView documents={documents} byId={byId} onOpen={openDoc} />}
 
         {view === "memory" && <MemoryView memory={memory} />}
+
+        {view === "issues" && <IssuesView issues={issues} byId={byId} onResolve={resolveIssue} />}
 
         {PLACEHOLDER[view] && <Placeholder icon={PLACEHOLDER[view].icon} title={PLACEHOLDER[view].title} desc={PLACEHOLDER[view].desc} />}
       </main>
@@ -620,7 +657,16 @@ const SS = {
   navItem: { display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 9, fontSize: 13, color: "#8aa0c0", cursor: "pointer", position: "relative" },
   navActive: { background: "#15203f", color: "#e8edff", border: "1px solid #243358" },
   navDot: { position: "absolute", right: 12, width: 7, height: 7, borderRadius: 99, background: "#4ade80", boxShadow: "0 0 6px #4ade80" },
-  sideLogout: { marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "9px", borderRadius: 8, border: "1px solid #243358", background: "transparent", color: "#9db0c8", fontFamily: MONO, fontSize: 12, fontWeight: 700, cursor: "pointer" },
+  sideLogout: { display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "9px", borderRadius: 8, border: "1px solid #243358", background: "transparent", color: "#9db0c8", fontFamily: MONO, fontSize: 12, fontWeight: 700, cursor: "pointer" },
+  issuesBadge: { marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "9px", borderRadius: 8, border: "1px solid rgba(251,85,112,.45)", background: "rgba(251,85,112,.12)", color: "#fca5b5", fontFamily: MONO, fontSize: 11.5, fontWeight: 700, cursor: "pointer" },
+  issuesBadgeClean: { border: "1px solid #1a3a2a", background: "rgba(74,222,128,.06)", color: "#6fae8a" },
+  issuesBadgeActive: { outline: "1px solid #3a4a66" },
+  issueRow: { background: "#0c1226", border: "1px solid", borderRadius: 11, padding: "12px 14px" },
+  issueTop: { display: "flex", alignItems: "center", gap: 9 },
+  issueTitle: { fontSize: 12.5, fontWeight: 700, color: "#e8edff", flex: 1 },
+  resolveBtn: { display: "flex", alignItems: "center", gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "6px 10px", borderRadius: 7, border: "1px solid rgba(74,222,128,.4)", background: "rgba(74,222,128,.1)", color: "#bbf7d0", cursor: "pointer", fontFamily: MONO, flexShrink: 0 },
+  issueDetail: { margin: "9px 0 0", fontFamily: MONO, fontSize: 10.5, color: "#9db0c8", lineHeight: 1.5, whiteSpace: "pre-wrap", background: "#070a14", border: "1px solid #161f3a", borderRadius: 7, padding: "8px 10px", maxHeight: 160, overflowY: "auto" },
+  issueMeta: { fontSize: 9.5, color: "#5e7088", marginTop: 8 },
   main: { flex: 1, minWidth: 0, padding: 18, background: "radial-gradient(120% 90% at 50% -10%, #0e1430, #0a0e1a 60%)", overflowY: "auto", maxHeight: "calc(100vh - 32px)" },
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },

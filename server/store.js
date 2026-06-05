@@ -20,6 +20,7 @@ const state = {
   events: [], // newest-first, capped
   documents: [], // newest-first deliverables (durable, not pruned with the queue)
   memory: new Map(), // scope (department) -> rolling knowledge base
+  issues: [], // newest-first; system/quality problems raised to the Group CTO
 };
 let eventSeq = 1;
 let pool = null;
@@ -77,7 +78,7 @@ export async function initStore() {
     await migrate();
   }
   await loadAgents();
-  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); }
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); }
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
 }
 
@@ -107,6 +108,11 @@ async function migrate() {
       scope text PRIMARY KEY, title text, content text,
       updated_at timestamptz DEFAULT now(), updated_by text
     );
+    CREATE TABLE IF NOT EXISTS issues (
+      id text PRIMARY KEY, kind text, title text, detail text,
+      task_id text, agent_id text, resolved boolean DEFAULT false,
+      created_at timestamptz DEFAULT now()
+    );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at DESC);
@@ -126,6 +132,14 @@ async function loadMemory() {
   for (const r of rows) state.memory.set(r.scope, {
     scope: r.scope, title: r.title, content: r.content,
     updatedAt: new Date(r.updated_at).getTime(), updatedBy: r.updated_by,
+  });
+}
+async function loadIssues() {
+  const { rows } = await pool.query("SELECT * FROM issues WHERE resolved=false ORDER BY created_at DESC LIMIT 100");
+  for (const r of rows) state.issues.push({
+    id: r.id, kind: r.kind, title: r.title, detail: r.detail,
+    taskId: r.task_id, agentId: r.agent_id, resolved: r.resolved,
+    createdAt: new Date(r.created_at).getTime(),
   });
 }
 
@@ -220,6 +234,14 @@ async function persistMemory(m) {
     [m.scope, m.title, m.content, new Date(m.updatedAt), m.updatedBy]
   ).catch((e) => console.error("[store] persistMemory", e.message));
 }
+async function persistIssue(i) {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO issues (id,kind,title,detail,task_id,agent_id,resolved,created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET resolved=$7`,
+    [i.id, i.kind, i.title, i.detail, i.taskId, i.agentId, i.resolved, new Date(i.createdAt)]
+  ).catch((e) => console.error("[store] persistIssue", e.message));
+}
 
 /* ---------- reads ---------- */
 export const getAgent = (id) => state.agents.get(id);
@@ -233,6 +255,7 @@ const serializeDocMeta = (d) => ({
   agentId: d.agentId, createdAt: d.createdAt, snippet: (d.content || "").slice(0, 160),
 });
 const serializeMemory = (m) => ({ scope: m.scope, title: m.title, content: m.content, updatedAt: m.updatedAt, updatedBy: m.updatedBy });
+const serializeIssue = (i) => ({ id: i.id, kind: i.kind, title: i.title, detail: (i.detail || "").slice(0, 600), taskId: i.taskId, agentId: i.agentId, createdAt: i.createdAt });
 
 export function snapshot() {
   return {
@@ -241,7 +264,30 @@ export function snapshot() {
     events: state.events.slice(0, 60),
     documents: state.documents.slice(0, 60).map(serializeDocMeta),
     memory: [...state.memory.values()].map(serializeMemory),
+    issues: getIssues().map(serializeIssue),
   };
+}
+
+/* ---------- issues (raised to the Group CTO) ---------- */
+export const getIssues = () => state.issues.filter((i) => !i.resolved);
+export function createIssue({ kind, title, detail, taskId, agentId }) {
+  // Dedupe: one open issue per kind+title (don't spam 100 identical quota errors).
+  const existing = state.issues.find((i) => !i.resolved && i.kind === kind && i.title === title);
+  if (existing) return existing;
+  const issue = { id: randomUUID(), kind, title, detail: detail || "", taskId: taskId || null, agentId: agentId || null, resolved: false, createdAt: Date.now() };
+  state.issues.unshift(issue);
+  if (state.issues.length > 200) state.issues.length = 200;
+  persistIssue(issue);
+  bus.emit("issue", serializeIssue(issue));
+  return issue;
+}
+export function resolveIssue(id) {
+  const i = state.issues.find((x) => x.id === id);
+  if (!i) return false;
+  i.resolved = true;
+  persistIssue(i);
+  bus.emit("issue", { id, resolved: true });
+  return true;
 }
 
 /* ---------- documents (deliverables) ---------- */

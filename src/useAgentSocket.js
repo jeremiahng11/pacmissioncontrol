@@ -11,6 +11,7 @@ export function useAgentSocket() {
   const [events, setEvents] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [memory, setMemory] = useState([]);
+  const [issues, setIssues] = useState([]);
   const [settings, setSettings] = useState({ paused: false, autonomous: true });
   const [gemini, setGemini] = useState(false);
   const [model, setModel] = useState("");
@@ -28,6 +29,7 @@ export function useAgentSocket() {
       setEvents(s.events || []);
       setDocuments(s.documents || []);
       setMemory(s.memory || []);
+      setIssues(s.issues || []);
       if (s.settings) setSettings(s.settings);
       if (typeof s.gemini === "boolean") setGemini(s.gemini);
       if (typeof s.model === "string") setModel(s.model);
@@ -61,6 +63,10 @@ export function useAgentSocket() {
           case "event": setEvents((p) => [m.event, ...p].slice(0, 60)); break;
           case "document": setDocuments((p) => [m.document, ...p.filter((d) => d.id !== m.document.id)].slice(0, 60)); break;
           case "memory": setMemory((p) => [m.memory, ...p.filter((x) => x.scope !== m.memory.scope)]); break;
+          case "issue":
+            if (m.issue.resolved) setIssues((p) => p.filter((i) => i.id !== m.issue.id));
+            else setIssues((p) => [m.issue, ...p.filter((i) => i.id !== m.issue.id)]);
+            break;
           case "settings": setSettings(m.settings); break;
           default: break;
         }
@@ -80,6 +86,7 @@ export function useAgentSocket() {
     location.href = "/login";
   }, []);
   const openDocument = useCallback((id) => api.document(id), []);
+  const resolveIssue = useCallback((id) => api.resolveIssue(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument };
+  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, resolveIssue };
 }

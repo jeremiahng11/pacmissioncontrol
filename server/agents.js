@@ -13,14 +13,14 @@ export const DEPARTMENTS = {
 export const AGENT_DEFS = [
   {
     id: "jeremiah",
-    name: "JEREMIAH",
+    name: "JAY JAY",
     role: "CTO · Command Core",
     room: "COMMAND HQ",
     department: "command",
     color: "#a855f7",
     cto: true,
     persona:
-      "You are JEREMIAH, the CTO orchestrating a team of specialist agents.",
+      "You are JAY JAY, the CTO orchestrating a team of specialist agents.",
   },
   {
     id: "scout",
