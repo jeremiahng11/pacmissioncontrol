@@ -42,6 +42,7 @@ export const api = {
   retryTask: (id) => req(`/api/tasks/${id}/retry`, { method: "POST" }),
   clearTasks: (scope) => req("/api/tasks/clear", { method: "POST", body: JSON.stringify({ scope }) }),
   resolveIssue: (id) => req(`/api/issues/${id}/resolve`, { method: "POST" }),
+  clearIssues: () => req("/api/issues/clear", { method: "POST" }),
   control: (action, extra = {}) =>
     req("/api/control", { method: "POST", body: JSON.stringify({ action, ...extra }) }),
   logout: () => req("/api/logout", { method: "POST" }),

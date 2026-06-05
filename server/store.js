@@ -328,6 +328,13 @@ function deleteIssuesForTask(taskId) {
   if (pool) pool.query("DELETE FROM issues WHERE task_id=$1", [taskId]).catch(() => {});
   for (const i of removed) bus.emit("issue", { id: i.id, resolved: true });
 }
+export function clearIssues() {
+  const n = state.issues.length;
+  state.issues = [];
+  if (pool) pool.query("DELETE FROM issues").catch(() => {});
+  bus.emit("issuesReset", []);
+  return n;
+}
 
 /* ---------- documents (deliverables) ---------- */
 export const getDocument = (id) => state.documents.find((d) => d.id === id);

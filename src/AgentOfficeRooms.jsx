@@ -332,12 +332,15 @@ function MemoryView({ memory, onDelete }) {
   );
 }
 
-function IssuesView({ issues, byId, onResolve, onRetry }) {
+function IssuesView({ issues, byId, onResolve, onRetry, onClearAll }) {
   const KIND = { quota: ["QUOTA", "#fb923c"], auth: ["AUTH", "#fb5570"], review: ["REVIEW", "#eab308"], error: ["ERROR", "#fb5570"] };
   return (
     <div style={SS.libWrap}>
-      <h1 style={SS.h1}><AlertTriangle size={20} color="#fb923c" /> Issues</h1>
-      <div style={SS.libSub}>Problems Jay Jay escalated to you (Group CTO) — API/quota, auth, or tasks that failed. <b>Retry & resolve</b> sends the task back to the agent to try again (continuing from partial work); <b>Dismiss</b> just closes the issue.</div>
+      <div style={SS.head}>
+        <h1 style={SS.h1}><AlertTriangle size={20} color="#fb923c" /> Issues</h1>
+        {issues.length > 0 && <button style={SS.dismissBtn} onClick={() => { if (confirm(`Dismiss all ${issues.length} issues?`)) onClearAll(); }}><Trash2 size={12} /> Dismiss all</button>}
+      </div>
+      <div style={SS.libSub}>Problems Jay Jay escalated to you (Group CTO) — API/quota, auth, or tasks that failed. <b>Retry & resolve</b> sends the task back to the agent to try again (continuing from partial work); <b>Dismiss</b> just closes the issue. If they keep reappearing, the underlying task keeps failing (usually the Gemini quota/model) — each failure is a new issue.</div>
       {issues.length === 0 && <div style={SS.queueEmpty}>No open issues. Everything's running clean. ✓</div>}
       <div style={SS.docsList}>
         {issues.map((i) => {
@@ -377,7 +380,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -666,7 +669,7 @@ export default function AgentOffice() {
 
         {view === "memory" && <MemoryView memory={memory} onDelete={deleteMemory} />}
 
-        {view === "issues" && <IssuesView issues={issues} byId={byId} onResolve={resolveIssue} onRetry={(i) => {
+        {view === "issues" && <IssuesView issues={issues} byId={byId} onClearAll={clearIssues} onResolve={resolveIssue} onRetry={(i) => {
           if (!i.taskId) { alert("This issue has no task to retry — dismissing it."); resolveIssue(i.id); return; }
           retryTask(i.taskId)
             .then(() => { resolveIssue(i.id); })

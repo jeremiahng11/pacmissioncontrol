@@ -14,7 +14,7 @@ import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL, GEMINI_DEMO_MO
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
   initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, updateTask, addEvent,
-  getDocument, deleteDocument, deleteMemory, resolveIssue,
+  getDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues,
   createAttachment, getAttachment, getAttachments, serializeAttachment,
 } from "./store.js";
 import multipart from "@fastify/multipart";
@@ -160,6 +160,10 @@ app.post("/api/issues/:id/resolve", (req, reply) => {
   reply.send({ ok: resolveIssue(req.params.id) });
 });
 
+app.post("/api/issues/clear", (req, reply) => {
+  reply.send({ removed: clearIssues() });
+});
+
 app.post("/api/tasks/clear", (req, reply) => {
   const scope = (req.body && req.body.scope) || "done";
   if (!["auto", "done", "all"].includes(scope)) return reply.code(400).send({ error: "bad scope" });
@@ -222,6 +226,7 @@ for (const type of ["agent", "task", "event", "settings", "document", "memory", 
 }
 // Bulk task replacement (after a clear).
 bus.on("tasksReset", (tasks) => broadcast(JSON.stringify({ type: "tasks", tasks })));
+bus.on("issuesReset", () => broadcast(JSON.stringify({ type: "issues", issues: [] })));
 
 wss.on("connection", (ws) => {
   sockets.add(ws);

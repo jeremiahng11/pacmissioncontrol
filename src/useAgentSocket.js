@@ -75,6 +75,7 @@ export function useAgentSocket() {
             if (m.issue.resolved) setIssues((p) => p.filter((i) => i.id !== m.issue.id));
             else setIssues((p) => [m.issue, ...p.filter((i) => i.id !== m.issue.id)]);
             break;
+          case "issues": setIssues(m.issues || []); break;
           case "settings": setSettings(m.settings); break;
           default: break;
         }
@@ -101,6 +102,10 @@ export function useAgentSocket() {
     setIssues((p) => p.filter((i) => i.id !== id)); // optimistic: clear from the list immediately
     return api.resolveIssue(id).catch(() => {});
   }, []);
+  const clearIssues = useCallback(() => {
+    setIssues([]);
+    return api.clearIssues().catch(() => {});
+  }, []);
 
-  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue };
+  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues };
 }
