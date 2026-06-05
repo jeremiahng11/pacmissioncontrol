@@ -465,7 +465,7 @@ export function resolveIssue(id) {
   bus.emit("issue", { id, resolved: true });
   return true;
 }
-function deleteIssuesForTask(taskId) {
+export function deleteIssuesForTask(taskId) {
   const removed = state.issues.filter((i) => i.taskId === taskId);
   if (!removed.length) return;
   state.issues = state.issues.filter((i) => i.taskId !== taskId);

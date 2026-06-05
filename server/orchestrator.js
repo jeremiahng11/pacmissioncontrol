@@ -5,7 +5,7 @@
 
 import {
   bus, getWorkers, getTasks, setAgent, createTask, updateTask, addEvent,
-  upsertDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials,
+  upsertDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory } from "./gemini.js";
 import { toolsFor } from "./tools.js";
@@ -92,6 +92,7 @@ async function runTask(agent, task) {
 
     if (verdict.complete) {
       updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note });
+      deleteIssuesForTask(task.id); // it succeeded — clear any prior issues for it
       if (isUser) {
         // Real work only: save the deliverable as a document and fold a note
         // into the department's memory so future tasks continue the work.

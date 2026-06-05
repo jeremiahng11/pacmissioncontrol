@@ -14,7 +14,9 @@ function isRateLimit(msg) {
   return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
 }
 
-const TIMEOUT_MS = 60000; // a hung/slow call must not freeze an agent forever
+// Generous so big Pro generations / follow-ups don't time out; still bounded so
+// a hung call can't freeze an agent forever. Override with GEMINI_TIMEOUT_MS.
+const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 150000);
 
 async function generate(system, prompt, { json = false, temperature = 0.7, model, media } = {}) {
   const contents = media && media.length
@@ -53,12 +55,12 @@ async function generate(system, prompt, { json = false, temperature = 0.7, model
 
 // Tool-use loop: lets an agent call tools (e.g. http_request to test an API),
 // feeding results back until it produces the final deliverable.
-const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini request timed out")), ms))]);
+const withTimeout = (p, ms = TIMEOUT_MS) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini request timed out")), ms))]);
 async function generateWithTools(system, prompt, { model, media, tools, toolCtx }) {
   const parts = [{ text: prompt }, ...(media || []).map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))];
   const contents = [{ role: "user", parts }];
   for (let step = 0; step < 8; step++) {
-    const res = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools } }), 60000);
+    const res = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools } }), TIMEOUT_MS);
     const calls = res.functionCalls;
     if (!calls || !calls.length) return (res.text || "").trim();
     contents.push({ role: "model", parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args || {} } })) });
@@ -70,7 +72,7 @@ async function generateWithTools(system, prompt, { model, media, tools, toolCtx 
     contents.push({ role: "user", parts: responseParts });
   }
   contents.push({ role: "user", parts: [{ text: "Wrap up now and produce the final deliverable from what you gathered." }] });
-  const final = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), 60000);
+  const final = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), TIMEOUT_MS);
   return (final.text || "").trim();
 }
 
@@ -98,7 +100,7 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     ? `\n\nNOTES FROM EARLIER WORK (build on these, continue and add to them, don't repeat):\n${memoryText}`
     : "";
   const priorBlock = priorWork
-    ? `\n\nPREVIOUS ATTEMPT (this was incomplete — CONTINUE from it: keep what's good, fix the gaps, and deliver the COMPLETE result):\n${priorWork}`
+    ? `\n\nPREVIOUS DELIVERABLE (continue from it — keep what's good, apply the changes, and return the COMPLETE updated result):\n${String(priorWork).slice(-16000)}`
     : "";
   const fileBlock = media && media.length
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
