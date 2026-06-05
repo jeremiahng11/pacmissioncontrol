@@ -9,6 +9,7 @@ services:
     name: mission-control
     runtime: node
     plan: free
+    region: singapore
     buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /login
