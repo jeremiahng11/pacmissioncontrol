@@ -814,6 +814,7 @@ export default function AgentOffice() {
                         {t.mission && <span style={SS.missionTag}>◇ {t.mission}</span>}
                         <span style={SS.taskRowTitle}>{t.title}</span>
                         {t.assignedTo && byId[t.assignedTo] && <span style={SS.taskRowWho}>{byId[t.assignedTo].name}</span>}
+                        <button style={SS.rowDel} title="Delete task" onClick={(e) => { e.stopPropagation(); deleteTask(t.id); if (selected === t.id) setSelected(null); }}><Trash2 size={12} /></button>
                       </div>
                     );
                   });
@@ -1013,6 +1014,7 @@ const SS = {
   taskRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440", cursor: "pointer" },
   taskRowTitle: { fontSize: 12, color: "#e8edff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   taskRowWho: { fontSize: 9, color: "#8aa0c0", letterSpacing: 0.5 },
+  rowDel: { marginLeft: "auto", flexShrink: 0, background: "transparent", border: "1px solid #2a3550", color: "#8aa0c0", borderRadius: 6, padding: "4px 6px", cursor: "pointer", display: "flex", alignItems: "center" },
   missionTag: { fontSize: 8.5, color: "#c4b5fd", background: "rgba(168,85,247,.12)", border: "1px solid rgba(168,85,247,.4)", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
   missionItem: { display: "flex", flexDirection: "column", gap: 6, padding: 9, borderRadius: 8, border: "1px solid #1a2440", background: "#0a1020" },
   missionItemHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
