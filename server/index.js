@@ -10,7 +10,7 @@ import formbody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import { WebSocketServer } from "ws";
 
-import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME } from "./config.js";
+import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
   initStore, snapshot, bus, createTask, deleteTask, getTask,
@@ -69,12 +69,12 @@ app.post("/api/logout", (req, reply) => {
 });
 
 app.get("/api/me", (req, reply) => {
-  reply.send({ username: AUTH_USERNAME, gemini: usingGemini });
+  reply.send({ username: AUTH_USERNAME, gemini: usingGemini, model: GEMINI_MODEL });
 });
 
 /* ---------- state + actions ---------- */
 app.get("/api/state", (req, reply) => {
-  reply.send({ ...snapshot(), settings: getSettings(), gemini: usingGemini });
+  reply.send({ ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL });
 });
 
 app.post("/api/tasks", (req, reply) => {
@@ -137,7 +137,7 @@ for (const type of ["agent", "task", "event", "settings"]) {
 
 wss.on("connection", (ws) => {
   sockets.add(ws);
-  ws.send(JSON.stringify({ type: "snapshot", ...snapshot(), settings: getSettings(), gemini: usingGemini }));
+  ws.send(JSON.stringify({ type: "snapshot", ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL }));
   ws.on("close", () => sockets.delete(ws));
   ws.on("error", () => sockets.delete(ws));
 });

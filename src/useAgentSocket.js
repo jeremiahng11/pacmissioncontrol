@@ -11,6 +11,7 @@ export function useAgentSocket() {
   const [events, setEvents] = useState([]);
   const [settings, setSettings] = useState({ paused: false, autonomous: true });
   const [gemini, setGemini] = useState(false);
+  const [model, setModel] = useState("");
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
 
@@ -25,6 +26,7 @@ export function useAgentSocket() {
       setEvents(s.events || []);
       if (s.settings) setSettings(s.settings);
       if (typeof s.gemini === "boolean") setGemini(s.gemini);
+      if (typeof s.model === "string") setModel(s.model);
     };
 
     const connect = () => {
@@ -70,5 +72,5 @@ export function useAgentSocket() {
     location.href = "/login";
   }, []);
 
-  return { agents, tasks, events, settings, gemini, connected, assignTask, deleteTask, control, logout };
+  return { agents, tasks, events, settings, gemini, model, connected, assignTask, deleteTask, control, logout };
 }

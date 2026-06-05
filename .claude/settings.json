@@ -16,7 +16,22 @@
       "Bash(kill %1)",
       "Bash(pkill -f \"node server/index.js\")",
       "Bash(rm -f /tmp/mc.cookie /tmp/wsclient.mjs /tmp/mc.log)",
-      "WebFetch(domain:ai.google.dev)"
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(which ffmpeg *)",
+      "Read(//Users/jeremiah/Desktop/**)",
+      "Bash(ls -la ~/Desktop/ 2>&1 | grep -i -E \"\\\\.mov|\\\\.mp4|recording\" ; echo \"--- broader search ---\"; find ~/Desktop ~/Downloads ~/Movies -maxdepth 2 -iname \"*.mov\" -o -iname \"*.mp4\" 2>/dev/null | head; echo \"--- tools ---\"; which avconvert sips qt_tools 2>&1; ls /opt/homebrew/bin/ffmpeg /usr/local/bin/ffmpeg 2>&1)",
+      "Read(//Users/jeremiah/Downloads/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Bash(mkdir -p /tmp/vid)",
+      "Bash(mdls -name kMDItemDurationSeconds -name kMDItemPixelWidth -name kMDItemPixelHeight \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\")",
+      "Bash(qlmanage -t -s 1400 -o /tmp/vid \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\")",
+      "Read(//tmp/**)",
+      "Bash(cp \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\" /tmp/vid/rec.mov 2>&1 && echo \"copied OK\" && ls -la /tmp/vid/rec.mov)",
+      "Bash(cp \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\" /tmp/vid/rec.mov && echo \"copied OK\" && ls -la /tmp/vid/rec.mov)"
+    ],
+    "additionalDirectories": [
+      "/Users/jeremiah/Desktop",
+      "/tmp/vid"
     ]
   }
 }
