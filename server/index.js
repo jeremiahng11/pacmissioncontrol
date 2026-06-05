@@ -13,7 +13,7 @@ import { WebSocketServer } from "ws";
 import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
-  initStore, snapshot, bus, createTask, deleteTask, getTask, getDocument,
+  initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, getDocument,
 } from "./store.js";
 import {
   startOrchestrator, dispatchNow, allHands, clockOut, getSettings, setSetting,
@@ -97,6 +97,12 @@ app.get("/api/documents/:id", (req, reply) => {
   reply.send(d);
 });
 
+app.post("/api/tasks/clear", (req, reply) => {
+  const scope = (req.body && req.body.scope) || "done";
+  if (!["auto", "done", "all"].includes(scope)) return reply.code(400).send({ error: "bad scope" });
+  reply.send({ removed: clearTasks(scope) });
+});
+
 app.delete("/api/tasks/:id", (req, reply) => {
   const ok = deleteTask(req.params.id);
   reply.code(ok ? 204 : 404).send();
@@ -132,14 +138,14 @@ app.setNotFoundHandler((req, reply) => {
 const sockets = new Set();
 const wss = new WebSocketServer({ noServer: true });
 
+const broadcast = (frame) => { for (const ws of sockets) if (ws.readyState === ws.OPEN) ws.send(frame); };
 for (const type of ["agent", "task", "event", "settings", "document", "memory"]) {
   bus.on(type, (payload) => {
-    const frame = JSON.stringify(type === "settings" ? { type, settings: payload } : { type, [type]: payload });
-    for (const ws of sockets) {
-      if (ws.readyState === ws.OPEN) ws.send(frame);
-    }
+    broadcast(JSON.stringify(type === "settings" ? { type, settings: payload } : { type, [type]: payload }));
   });
 }
+// Bulk task replacement (after a clear).
+bus.on("tasksReset", (tasks) => broadcast(JSON.stringify({ type: "tasks", tasks })));
 
 wss.on("connection", (ws) => {
   sockets.add(ws);

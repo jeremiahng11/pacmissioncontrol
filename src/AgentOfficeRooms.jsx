@@ -311,7 +311,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, control, logout, openDocument } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -523,6 +523,12 @@ export default function AgentOffice() {
                     ))}
                   </div>
                 </div>
+                {taskList.length > 0 && (
+                  <div style={SS.clearRow}>
+                    <button style={SS.clearBtn} onClick={() => { if (confirm("Remove all auto-generated (demo) tasks?")) clearTasks("auto"); }}><Trash2 size={11} /> Clear demo (auto)</button>
+                    <button style={SS.clearBtn} onClick={() => { if (confirm("Remove all completed tasks (done/failed)?")) clearTasks("done"); }}><Trash2 size={11} /> Clear completed</button>
+                  </div>
+                )}
                 {(() => {
                   const shown = taskList.filter((t) => taskFilter === "all" ? true : taskFilter === "mine" ? t.createdBy === "user" : t.createdBy !== "user");
                   if (!shown.length) return <div style={SS.queueEmpty}>{taskFilter === "mine" ? "You haven't assigned any tasks yet — use the composer on the left." : taskFilter === "auto" ? "No auto-generated tasks (AUTO is off or idle)." : "No tasks yet. Add one, or let Jeremiah run the office in Visual."}</div>;
@@ -650,6 +656,8 @@ const SS = {
   chipRow: { display: "flex", gap: 6 },
   chip: { fontSize: 9.5, fontWeight: 700, padding: "5px 11px", borderRadius: 99, border: "1px solid #243358", background: "transparent", color: "#8aa0c0", cursor: "pointer", fontFamily: MONO },
   chipActive: { background: "#15203f", color: "#e8edff", borderColor: "#3a4a66" },
+  clearRow: { display: "flex", gap: 8, marginBottom: 2 },
+  clearBtn: { display: "flex", alignItems: "center", gap: 5, fontSize: 9, fontWeight: 700, letterSpacing: 0.5, padding: "6px 10px", borderRadius: 7, border: "1px solid rgba(251,85,112,.35)", background: "rgba(251,85,112,.08)", color: "#fca5b5", cursor: "pointer", fontFamily: MONO },
   srcBadge: { fontSize: 7.5, fontWeight: 700, padding: "2px 6px", borderRadius: 99, border: "1px solid", letterSpacing: 0.8, flexShrink: 0 },
   taskRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440", cursor: "pointer" },
   taskRowTitle: { fontSize: 12, color: "#e8edff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },

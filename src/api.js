@@ -23,6 +23,7 @@ export const api = {
   document: (id) => req(`/api/documents/${id}`),
   createTask: (t) => req("/api/tasks", { method: "POST", body: JSON.stringify(t) }),
   deleteTask: (id) => req(`/api/tasks/${id}`, { method: "DELETE" }),
+  clearTasks: (scope) => req("/api/tasks/clear", { method: "POST", body: JSON.stringify({ scope }) }),
   control: (action, extra = {}) =>
     req("/api/control", { method: "POST", body: JSON.stringify({ action, ...extra }) }),
   logout: () => req("/api/logout", { method: "POST" }),

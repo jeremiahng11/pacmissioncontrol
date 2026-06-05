@@ -57,6 +57,7 @@ export function useAgentSocket() {
               setTasks((p) => { const n = { ...p }; delete n[m.task.id]; return n; });
             else setTasks((p) => ({ ...p, [m.task.id]: m.task }));
             break;
+          case "tasks": setTasks(Object.fromEntries((m.tasks || []).map((t) => [t.id, t]))); break;
           case "event": setEvents((p) => [m.event, ...p].slice(0, 60)); break;
           case "document": setDocuments((p) => [m.document, ...p.filter((d) => d.id !== m.document.id)].slice(0, 60)); break;
           case "memory": setMemory((p) => [m.memory, ...p.filter((x) => x.scope !== m.memory.scope)]); break;
@@ -72,6 +73,7 @@ export function useAgentSocket() {
 
   const assignTask = useCallback((t) => api.createTask(t).catch((e) => console.error(e)), []);
   const deleteTask = useCallback((id) => api.deleteTask(id).catch(() => {}), []);
+  const clearTasks = useCallback((scope) => api.clearTasks(scope).catch(() => {}), []);
   const control = useCallback((a, extra) => api.control(a, extra).catch(() => {}), []);
   const logout = useCallback(async () => {
     await api.logout().catch(() => {});
@@ -79,5 +81,5 @@ export function useAgentSocket() {
   }, []);
   const openDocument = useCallback((id) => api.document(id), []);
 
-  return { agents, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, control, logout, openDocument };
+  return { agents, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument };
 }

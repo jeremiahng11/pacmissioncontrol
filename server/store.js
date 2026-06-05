@@ -350,3 +350,22 @@ export function deleteTask(id) {
   bus.emit("task", { id, deleted: true });
   return true;
 }
+
+// Bulk clear. Never removes tasks an agent is actively working (in_progress/
+// review). Broadcasts the remaining list so clients replace in one frame.
+export function clearTasks(scope = "done") {
+  const match = (t) => {
+    if (t.status === "in_progress" || t.status === "review") return false;
+    if (scope === "auto") return t.createdBy !== "user";
+    if (scope === "done") return t.status === "done" || t.status === "failed";
+    if (scope === "all") return true;
+    return false;
+  };
+  const ids = getTasks().filter(match).map((t) => t.id);
+  for (const id of ids) {
+    state.tasks.delete(id);
+    if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [id]).catch(() => {});
+  }
+  if (ids.length) bus.emit("tasksReset", getTasks().map(serializeTask));
+  return ids.length;
+}
