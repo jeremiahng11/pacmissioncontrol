@@ -17,6 +17,7 @@ import {
   getDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues,
   createAttachment, getAttachment, getAttachments, serializeAttachment,
   createRoutine, updateRoutine, deleteRoutine, VALID_CADENCE,
+  setTaskCredential, getTaskCredentials,
 } from "./store.js";
 import { startScheduler, seedRoutines } from "./schedule.js";
 import multipart from "@fastify/multipart";
@@ -149,6 +150,15 @@ app.get("/api/documents/:id/download", (req, reply) => {
     .header("Content-Type", "application/msword")
     .header("Content-Disposition", `attachment; filename="${safeFilename(d.title)}"`)
     .send(html);
+});
+
+app.post("/api/tasks/:id/credentials", (req, reply) => {
+  const t = getTask(req.params.id);
+  if (!t) return reply.code(404).send({ error: "not found" });
+  const { name, value } = req.body || {};
+  if (!name || value == null || !String(name).trim()) return reply.code(400).send({ error: "name and value required" });
+  setTaskCredential(t.id, String(name).trim(), String(value));
+  reply.send({ ok: true, names: Object.keys(getTaskCredentials(t.id)) });
 });
 
 app.get("/api/documents/:id/zip", async (req, reply) => {

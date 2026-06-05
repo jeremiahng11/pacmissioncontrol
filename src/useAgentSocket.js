@@ -112,9 +112,10 @@ export function useAgentSocket() {
     setIssues([]);
     return api.clearIssues().catch(() => {});
   }, []);
+  const setCredential = useCallback((id, name, value) => api.setCredential(id, name, value).catch(() => {}), []);
   const createRoutine = useCallback((r) => api.createRoutine(r).catch((e) => console.error(e)), []);
   const updateRoutine = useCallback((id, patch) => api.updateRoutine(id, patch).catch(() => {}), []);
   const deleteRoutine = useCallback((id) => api.deleteRoutine(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, createRoutine, updateRoutine, deleteRoutine };
+  return { agents, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine };
 }

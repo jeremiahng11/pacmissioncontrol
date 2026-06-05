@@ -5,9 +5,10 @@
 
 import {
   bus, getWorkers, getTasks, setAgent, createTask, updateTask, addEvent,
-  createDocument, getMemoryText, appendMemory, createIssue, getAttachments,
+  createDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials,
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory } from "./gemini.js";
+import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
 
@@ -63,9 +64,12 @@ async function runTask(agent, task) {
           .filter((a) => /^image\//.test(a.mime) || a.mime === "application/pdf" || /^text\//.test(a.mime))
           .map((a) => ({ mimeType: a.mime, data: a.data }))
       : [];
+    // Tools (least-privilege per department): Development can call APIs.
+    const tools = isUser ? toolsFor(agent.department) : null;
+    const toolCtx = tools ? { taskId: task.id, agentId: agent.id, agentName: agent.name, credentials: getTaskCredentials(task.id) } : null;
     let result;
     try {
-      result = await runWork(agent, task, memoryText, model, priorWork, media);
+      result = await runWork(agent, task, memoryText, model, priorWork, media, tools, toolCtx);
     } catch (err) { handleError(agent, task, err); return; }
     updateTask(task.id, { status: "review", result });
 

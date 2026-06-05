@@ -23,6 +23,7 @@ const state = {
   issues: [], // newest-first; system/quality problems raised to the Group CTO
   attachments: new Map(), // id -> {id, taskId, filename, mime, data(base64), size}
   routines: new Map(), // id -> scheduled/recurring task definition
+  credentials: new Map(), // taskId -> { name: value } (sandbox creds; values never sent to clients)
 };
 let eventSeq = 1;
 let pool = null;
@@ -78,7 +79,25 @@ export function serializeAgent(a) {
   };
 }
 export function serializeTask(t) {
-  return { ...t, attachments: getAttachments(t.id).map(serializeAttachment) };
+  // credentialNames only — values are never sent to clients.
+  return { ...t, attachments: getAttachments(t.id).map(serializeAttachment), credentialNames: Object.keys(state.credentials.get(t.id) || {}) };
+}
+
+/* ---------- per-task sandbox credentials (values stay server-side) ---------- */
+export const getTaskCredentials = (taskId) => state.credentials.get(taskId) || {};
+export function setTaskCredential(taskId, name, value) {
+  if (!state.credentials.has(taskId)) state.credentials.set(taskId, {});
+  state.credentials.get(taskId)[name] = value;
+  if (pool) pool.query(
+    "INSERT INTO task_credentials (task_id,name,value) VALUES ($1,$2,$3) ON CONFLICT (task_id,name) DO UPDATE SET value=$3",
+    [taskId, name, value]
+  ).catch((e) => console.error("[store] setTaskCredential", e.message));
+  const t = state.tasks.get(taskId);
+  if (t) bus.emit("task", serializeTask(t)); // refresh credentialNames
+}
+function deleteCredentialsForTask(taskId) {
+  state.credentials.delete(taskId);
+  if (pool) pool.query("DELETE FROM task_credentials WHERE task_id=$1", [taskId]).catch(() => {});
 }
 
 /* ---------- boot ---------- */
@@ -98,7 +117,7 @@ export async function initStore() {
     await migrate();
   }
   await loadAgents();
-  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); await loadRoutines(); reconcileIssues(); }
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); await loadRoutines(); await loadCredentials(); reconcileIssues(); }
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
 }
 
@@ -156,6 +175,9 @@ async function migrate() {
       next_run_at timestamptz, last_run_at timestamptz,
       created_by text, created_at timestamptz DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS task_credentials (
+      task_id text, name text, value text, PRIMARY KEY (task_id, name)
+    );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at DESC);
@@ -189,6 +211,13 @@ async function loadAttachments() {
   // Load metadata only (data is fetched on demand) for tasks still around.
   const { rows } = await pool.query("SELECT id, task_id, filename, mime, data, size FROM attachments");
   for (const r of rows) state.attachments.set(r.id, { id: r.id, taskId: r.task_id, filename: r.filename, mime: r.mime, data: r.data, size: r.size });
+}
+async function loadCredentials() {
+  const { rows } = await pool.query("SELECT task_id, name, value FROM task_credentials");
+  for (const r of rows) {
+    if (!state.credentials.has(r.task_id)) state.credentials.set(r.task_id, {});
+    state.credentials.get(r.task_id)[r.name] = r.value;
+  }
 }
 async function loadRoutines() {
   const { rows } = await pool.query("SELECT * FROM routines");
@@ -564,6 +593,7 @@ export function deleteTask(id) {
   state.tasks.delete(id);
   deleteAttachmentsForTask(id);
   deleteIssuesForTask(id);
+  deleteCredentialsForTask(id);
   if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [id]).catch(() => {});
   bus.emit("task", { id, deleted: true });
   return true;

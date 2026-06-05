@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
@@ -339,7 +339,7 @@ function MemoryView({ memory, onDelete }) {
 }
 
 function IssuesView({ issues, byId, onResolve, onRetry, onClearAll }) {
-  const KIND = { quota: ["QUOTA", "#fb923c"], auth: ["AUTH", "#fb5570"], config: ["CONFIG", "#fb5570"], review: ["REVIEW", "#eab308"], error: ["ERROR", "#fb5570"] };
+  const KIND = { quota: ["QUOTA", "#fb923c"], auth: ["AUTH", "#fb5570"], config: ["CONFIG", "#fb5570"], credentials: ["CREDS", "#38bdf8"], review: ["REVIEW", "#eab308"], error: ["ERROR", "#fb5570"] };
   return (
     <div style={SS.libWrap}>
       <div style={SS.head}>
@@ -441,7 +441,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -452,6 +452,7 @@ export default function AgentOffice() {
   const [idleDismissed, setIdleDismissed] = useState(false);
   const [autoDismissed, setAutoDismissed] = useState(false);
   const [files, setFiles] = useState([]);
+  const [credForm, setCredForm] = useState({ name: "", value: "" });
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -780,6 +781,20 @@ export default function AgentOffice() {
             <div style={SS.secTitle}>{["failed", "blocked"].includes(selectedTask.status) ? "PARTIAL WORK SO FAR" : "DELIVERABLE"}</div>
             <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
             {selectedTask.reviewNotes && !["failed", "blocked"].includes(selectedTask.status) && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
+            {(selectedTask.department === "development" || (selectedTask.credentialNames && selectedTask.credentialNames.length > 0)) && (
+              <>
+                <div style={SS.secTitle}>SANDBOX CREDENTIALS</div>
+                {selectedTask.credentialNames && selectedTask.credentialNames.length > 0 && (
+                  <div style={SS.fileChips}>{selectedTask.credentialNames.map((n) => <span key={n} style={SS.fileChip}><Key size={11} /> {n} <span style={{ color: "#5e7088" }}>••••</span></span>)}</div>
+                )}
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <input style={{ ...SS.input, flex: 1 }} placeholder="name (e.g. API_KEY)" value={credForm.name} onChange={(e) => setCredForm((f) => ({ ...f, name: e.target.value }))} />
+                  <input style={{ ...SS.input, flex: 1 }} type="password" placeholder="value" value={credForm.value} onChange={(e) => setCredForm((f) => ({ ...f, value: e.target.value }))} />
+                  <button style={SS.downloadBtn} onClick={() => { if (credForm.name.trim() && credForm.value) { setCredential(selectedTask.id, credForm.name.trim(), credForm.value); setCredForm({ name: "", value: "" }); } }}>ADD</button>
+                </div>
+                <div style={{ fontSize: 10, color: "#5e7088", marginTop: 4, lineHeight: 1.4 }}>Stored server-side, never shown back or logged. Orbit references them with {"{{NAME}}"} placeholders. After adding, press <b>Continue</b> to run with them.</div>
+              </>
+            )}
             <div style={SS.modalActions}>
               {["failed", "blocked"].includes(selectedTask.status) && <button style={SS.continueBtn} onClick={() => retryTask(selectedTask.id).then(() => alert("Jay Jay is re-dispatching this task — watch the Visual office. If it blocks again, it's the Gemini quota/model.")).catch((e) => alert("Couldn't continue: " + e.message + (/not found/i.test(e.message) ? " (the task no longer exists — re-assign it fresh)" : "")))}><RotateCw size={13} /> CONTINUE TASK</button>}
               {(() => { const td = documents.find((d) => d.taskId === selectedTask.id); return td ? <button style={SS.downloadBtn} onClick={() => downloadDoc(td.id)}><Download size={13} /> DOWNLOAD .DOC</button> : null; })()}

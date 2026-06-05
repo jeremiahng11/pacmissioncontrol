@@ -5,6 +5,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_API_KEY, GEMINI_MODEL } from "./config.js";
+import { executeTool } from "./tools.js";
 
 const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 export const usingGemini = !!ai;
@@ -50,6 +51,29 @@ async function generate(system, prompt, { json = false, temperature = 0.7, model
   }
 }
 
+// Tool-use loop: lets an agent call tools (e.g. http_request to test an API),
+// feeding results back until it produces the final deliverable.
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini request timed out")), ms))]);
+async function generateWithTools(system, prompt, { model, media, tools, toolCtx }) {
+  const parts = [{ text: prompt }, ...(media || []).map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))];
+  const contents = [{ role: "user", parts }];
+  for (let step = 0; step < 8; step++) {
+    const res = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools } }), 60000);
+    const calls = res.functionCalls;
+    if (!calls || !calls.length) return (res.text || "").trim();
+    contents.push({ role: "model", parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args || {} } })) });
+    const responseParts = [];
+    for (const c of calls) {
+      const result = await executeTool(c.name, c.args || {}, toolCtx);
+      responseParts.push({ functionResponse: { name: c.name, response: result } });
+    }
+    contents.push({ role: "user", parts: responseParts });
+  }
+  contents.push({ role: "user", parts: [{ text: "Wrap up now and produce the final deliverable from what you gathered." }] });
+  const final = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), 60000);
+  return (final.text || "").trim();
+}
+
 const SIM = {
   observatory: ["scan the data streams", "chart the latest signals", "log the night readings"],
   security: ["sweep the perimeter", "audit the access logs", "run a vulnerability pass"],
@@ -61,7 +85,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 /* Worker performs the task, building on the department's memory.
    model=null (or no key) => simulated path: no API call, no cost. */
-export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = []) {
+export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null) {
   if (!ai || !model) {
     await wait(1200 + Math.random() * 1800);
     return !model
@@ -83,13 +107,18 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const codeBlock = agent.department === "development"
     ? `\n\nIf you produce a multi-file project or app, output EACH file as a marker line "===== FILE: relative/path.ext =====" immediately followed by its fenced code block, so the code can be packaged into a downloadable .zip. Keep explanations as normal prose between files.`
     : "";
-  const out = await generate(
+  const system =
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
-      `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
-      `No preamble like "Here is" — start directly with the title heading.`,
-    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fileBlock}${codeBlock}`,
-    { model, media }
-  );
+    `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
+    `No preamble like "Here is" — start directly with the title heading.`;
+  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fileBlock}${codeBlock}`;
+
+  if (tools && toolCtx) {
+    const toolNote = "\n\nYou can use tools: http_request (actually call an API endpoint to test it) and request_credentials (ask the human for sandbox keys). For any secret, use a {{NAME}} placeholder. ACTUALLY run the tests with http_request and report the real responses; if you don't have a needed credential, call request_credentials and then produce a test plan noting execution is pending.";
+    const out = await generateWithTools(system + toolNote, userPrompt, { model, media, tools, toolCtx });
+    return out || `Done: ${task.title}.`;
+  }
+  const out = await generate(system, userPrompt, { model, media });
   return out || `Done: ${task.title}.`;
 }
 

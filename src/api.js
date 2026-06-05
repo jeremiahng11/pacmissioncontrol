@@ -43,6 +43,7 @@ export const api = {
   clearTasks: (scope) => req("/api/tasks/clear", { method: "POST", body: JSON.stringify({ scope }) }),
   resolveIssue: (id) => req(`/api/issues/${id}/resolve`, { method: "POST" }),
   clearIssues: () => req("/api/issues/clear", { method: "POST" }),
+  setCredential: (id, name, value) => req(`/api/tasks/${id}/credentials`, { method: "POST", body: JSON.stringify({ name, value }) }),
   createRoutine: (r) => req("/api/routines", { method: "POST", body: JSON.stringify(r) }),
   updateRoutine: (id, patch) => req(`/api/routines/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   deleteRoutine: (id) => req(`/api/routines/${id}`, { method: "DELETE" }),
