@@ -512,42 +512,49 @@ export default function AgentOffice() {
 
   // Jay Jay patrols the office while on duty — wanders between rooms, pauses,
   // and breaks off to deliver a task to an agent when one is assigned.
-  const centerOf = (room) => {
+  // A point on a room's floor (xFrac 0..1 across the room width).
+  const floorPoint = (room, xFrac = 0.5) => {
     const cont = roomsRef.current;
     if (!cont) return null;
     const el = cont.querySelector(`[data-room="${room}"]`);
     if (!el) return null;
     const cr = cont.getBoundingClientRect(), r = el.getBoundingClientRect();
-    return { x: r.left - cr.left + r.width / 2, y: r.top - cr.top + r.height / 2 };
+    return { x: r.left - cr.left + r.width * xFrac, y: r.top - cr.top + r.height * 0.6 };
   };
+  const faceX = (j, c) => (c.x < (j.coords?.x ?? c.x) - 3 ? "left" : c.x > (j.coords?.x ?? c.x) + 3 ? "right" : j.facing);
+
   const jayStep = () => {
     const T = jayTimers.current;
     const item = jayQueue.current.shift();
     if (item) {
-      // Deliver: walk to the agent's room, announce, pause, then resume patrol.
-      const c = centerOf(item.room);
+      // A task is ready: leave HQ, walk to the agent's room, announce it,
+      // then head back to HQ and resume pacing.
+      const c = floorPoint(item.room, 0.5);
       if (c) {
-        setJay((j) => ({ coords: c, facing: c.x < (j.coords?.x ?? c.x) ? "left" : "right", say: `→ ${item.name}: ${item.task}` }));
+        setJay((j) => ({ coords: c, facing: faceX(j, c), say: `→ ${item.name}: ${item.task}` }));
         setSay({ room: item.room, text: "on it!" });
       }
       T.push(setTimeout(() => {
         setJay((j) => ({ ...j, say: null }));
         setSay((s) => (s && s.room === item.room ? null : s));
-        T.push(setTimeout(jayStep, 500));
+        const home = floorPoint("COMMAND HQ", 0.5);
+        if (home) setJay((j) => ({ ...j, coords: home, facing: faceX(j, home) }));
+        T.push(setTimeout(jayStep, 1500));
       }, 2600));
     } else {
-      // Patrol: wander to a random room and pause for a bit.
-      const room = ROOMS[Math.floor(Math.random() * ROOMS.length)];
-      const c = centerOf(room);
-      if (c) setJay((j) => ({ coords: c, facing: c.x < (j.coords?.x ?? c.x) ? "left" : "right", say: null }));
-      T.push(setTimeout(jayStep, 2200 + Math.random() * 2600));
+      // No task: pace around Command HQ — move left/right, sometimes stay put.
+      if (Math.random() > 0.3) {
+        const c = floorPoint("COMMAND HQ", 0.18 + Math.random() * 0.64);
+        if (c) setJay((j) => ({ coords: c, facing: faceX(j, c), say: null }));
+      }
+      T.push(setTimeout(jayStep, 1800 + Math.random() * 3000));
     }
   };
 
   // Start/stop the patrol loop with the Visual view.
   useEffect(() => {
     if (view !== "visual") return;
-    const start = setTimeout(() => { setJay((j) => (j.coords ? j : { ...j, coords: centerOf("COMMAND HQ") })); jayStep(); }, 200);
+    const start = setTimeout(() => { setJay((j) => (j.coords ? j : { ...j, coords: floorPoint("COMMAND HQ", 0.5) })); jayStep(); }, 200);
     return () => { clearTimeout(start); jayTimers.current.forEach(clearTimeout); jayTimers.current = []; };
   }, [view]);
 
