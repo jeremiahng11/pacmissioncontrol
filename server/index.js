@@ -249,6 +249,24 @@ app.post("/api/tasks/:id/retry", async (req, reply) => {
   reply.send({ ok: true });
 });
 
+app.post("/api/tasks/:id/followup", (req, reply) => {
+  const t = getTask(req.params.id);
+  if (!t) return reply.code(404).send({ error: "not found" });
+  const instruction = String((req.body || {}).instruction || "").trim();
+  if (!instruction) return reply.code(400).send({ error: "instruction required" });
+  // New task that continues from this one's deliverable (the agent builds on it).
+  const ft = createTask({
+    title: instruction.slice(0, 80),
+    prompt: instruction,
+    department: t.department,
+    assignedTo: t.assignedTo || null,
+    createdBy: "user",
+    priorWork: t.result || null,
+    parentId: t.id,
+  });
+  reply.code(201).send(ft);
+});
+
 app.delete("/api/tasks/:id", (req, reply) => {
   const ok = deleteTask(req.params.id);
   reply.code(ok ? 204 : 404).send();

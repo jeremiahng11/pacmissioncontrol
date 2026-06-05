@@ -67,7 +67,7 @@ async function runTask(agent, task) {
     const memoryText = isUser ? getMemoryText(agent.department) : "";
     // Any output from a prior attempt becomes context so the agent CONTINUES
     // the work instead of starting cold (re-queues and manual "Continue").
-    const priorWork = isUser ? (task.result || null) : null;
+    const priorWork = isUser ? (task.result || task.priorWork || null) : null;
     // Attached files the agent can read (images / PDF / text). Gemini-supported types only.
     const media = isUser
       ? getAttachments(task.id)

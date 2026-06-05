@@ -225,7 +225,7 @@ const Room = memo(function Room({ room, name, color, cto, status, task, departme
         {sayText && !cto && <div className="speech" style={{ borderColor: color, color }}>{sayText}</div>}
         {status === "thinking" && <div className="cue" style={{ color }}>?</div>}
         {status === "idle" && <div className="cue zzz">z z z</div>}
-        <div className={`walker ${busy && !ctoAway ? "busy " + walk : ""}`}>
+        <div className={`walker ${busy && !ctoAway && !cto ? "busy " + walk : ""}`}>
           <div className="oshadow" style={ctoAway ? { opacity: 0 } : undefined} />
           {!ctoAway && <Octo color={color} size={cto ? 76 : 56} status={status} cto={cto} />}
         </div>
@@ -466,7 +466,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -478,6 +478,7 @@ export default function AgentOffice() {
   const [autoDismissed, setAutoDismissed] = useState(false);
   const [files, setFiles] = useState([]);
   const [credForm, setCredForm] = useState({ name: "", value: "" });
+  const [followText, setFollowText] = useState("");
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -521,7 +522,13 @@ export default function AgentOffice() {
   };
   const step = () => {
     const item = queueRef.current.shift();
-    if (!item) { setCourier(null); runningRef.current = false; return; }
+    if (!item) {
+      // Fade out at HQ rather than popping, so the hand-off to the resting
+      // Jay Jay is smooth (no jump).
+      setCourier((c) => (c ? { ...c, exiting: true } : null));
+      timersRef.current.push(setTimeout(() => { setCourier(null); runningRef.current = false; }, 320));
+      return;
+    }
     const hq = centerOf("COMMAND HQ"), tgt = centerOf(item.room);
     if (!hq || !tgt) { setCourier(null); runningRef.current = false; return; }
     const T = timersRef.current;
@@ -687,7 +694,7 @@ export default function AgentOffice() {
                 );
               })}
               {courier && (
-                <div className="courier" style={{ left: courier.coords.x - 38, top: courier.coords.y - 58 }}>
+                <div className="courier" style={{ left: courier.coords.x - 38, top: courier.coords.y - 58, opacity: courier.exiting ? 0 : 1 }}>
                   {courier.showSpeech && <div className="courier-say">→ {courier.name}: {courier.task}</div>}
                   <div className="oshadow courier-shadow" />
                   <Octo color="#facc15" size={76} status="working" cto flip={courier.facing === "left"} />
@@ -835,6 +842,16 @@ export default function AgentOffice() {
                   <button style={SS.downloadBtn} onClick={() => { if (credForm.name.trim() && credForm.value) { setCredential(selectedTask.id, credForm.name.trim(), credForm.value); setCredForm({ name: "", value: "" }); } }}>ADD</button>
                 </div>
                 <div style={{ fontSize: 10, color: "#5e7088", marginTop: 4, lineHeight: 1.4 }}>Stored server-side, never shown back or logged. Orbit references them with {"{{NAME}}"} placeholders. After adding, press <b>Continue</b> to run with them.</div>
+              </>
+            )}
+            {selectedTask.status === "done" && (
+              <>
+                <div style={SS.secTitle}>FOLLOW UP / IMPROVE</div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input style={{ ...SS.input, flex: 1 }} placeholder="What to change, add, or expand?" value={followText} onChange={(e) => setFollowText(e.target.value)} />
+                  <button style={SS.continueBtn} onClick={() => { const v = followText.trim(); if (v) { followupTask(selectedTask.id, v); setFollowText(""); setSelected(null); } }}><RotateCw size={13} /> SEND</button>
+                </div>
+                <div style={{ fontSize: 10, color: "#5e7088", marginTop: 4, lineHeight: 1.4 }}>Creates a follow-up that <b>continues from this deliverable</b> — the agent builds on what's done (code, research, etc.), not from scratch.</div>
               </>
             )}
             <div style={SS.modalActions}>
@@ -1049,7 +1066,7 @@ const CSS = `
 .cto-away { font-family:'JetBrains Mono'; font-size:8px; color:#a855f7; opacity:.8; border:1px dashed #a855f766; border-radius:6px; padding:3px 7px; white-space:nowrap; }
 @keyframes busyA { 0%,12%{left:26%;} 26%,38%{left:50%;} 52%,64%{left:74%;} 80%,92%{left:50%;} 100%{left:26%;} }
 @keyframes busyB { 0%,12%{left:74%;} 26%,38%{left:50%;} 52%,64%{left:26%;} 80%,92%{left:50%;} 100%{left:74%;} }
-.courier { position:absolute; z-index:7; display:flex; flex-direction:column; align-items:center; pointer-events:none; transition:left 1.2s cubic-bezier(.45,.05,.3,1), top 1.2s cubic-bezier(.45,.05,.3,1); }
+.courier { position:absolute; z-index:7; display:flex; flex-direction:column; align-items:center; pointer-events:none; transition:left 1.2s cubic-bezier(.45,.05,.3,1), top 1.2s cubic-bezier(.45,.05,.3,1), opacity .3s ease; }
 .courier-shadow { background:#facc15; }
 .courier-say { position:absolute; bottom:100%; margin-bottom:4px; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; color:#fde68a; background:#070a14; border:1px solid #facc15; border-radius:6px; padding:3px 8px; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 0 10px #facc1555; }
 .agent-tag { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-family:'Press Start 2P',monospace; font-size:7px; letter-spacing:1px; opacity:.85; z-index:2; }

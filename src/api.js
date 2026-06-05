@@ -40,6 +40,7 @@ export const api = {
   },
   deleteTask: (id) => req(`/api/tasks/${id}`, { method: "DELETE" }),
   retryTask: (id) => req(`/api/tasks/${id}/retry`, { method: "POST" }),
+  followupTask: (id, instruction) => req(`/api/tasks/${id}/followup`, { method: "POST", body: JSON.stringify({ instruction }) }),
   clearTasks: (scope) => req("/api/tasks/clear", { method: "POST", body: JSON.stringify({ scope }) }),
   resolveIssue: (id) => req(`/api/issues/${id}/resolve`, { method: "POST" }),
   clearIssues: () => req("/api/issues/clear", { method: "POST" }),
