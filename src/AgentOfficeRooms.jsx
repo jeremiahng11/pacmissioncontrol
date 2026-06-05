@@ -271,6 +271,7 @@ export default function AgentOffice() {
   const [selected, setSelected] = useState(null);
   const [say, setSay] = useState(null);
   const [courier, setCourier] = useState(null);
+  const [taskFilter, setTaskFilter] = useState("all");
 
   const roomsRef = useRef(null);
   const queueRef = useRef([]);
@@ -456,18 +457,31 @@ export default function AgentOffice() {
                 <div style={SS.composeHint}>Pick a department (or “Any”) and Jeremiah routes it to the right agent.</div>
               </div>
               <div style={SS.tasksList}>
-                <div style={SS.secTitle}>QUEUE · {activeTasks.length} active · {taskList.length} total</div>
-                {taskList.length === 0 && <div style={SS.queueEmpty}>No tasks yet. Add one, or let Jeremiah run the office in Visual.</div>}
-                {taskList.map((t) => {
-                  const col = STATUS_COLOR[t.status] || "#64786d";
-                  return (
-                    <div key={t.id} style={SS.taskRow} onClick={() => setSelected(t.id)}>
-                      <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
-                      <span style={SS.taskRowTitle}>{t.title}</span>
-                      {t.assignedTo && byId[t.assignedTo] && <span style={SS.taskRowWho}>{byId[t.assignedTo].name}</span>}
-                    </div>
-                  );
-                })}
+                <div style={SS.tasksListHead}>
+                  <div style={SS.secTitle}>QUEUE · {activeTasks.length} active · {taskList.length} total</div>
+                  <div style={SS.chipRow}>
+                    {[["all", "All"], ["mine", "Mine"], ["auto", "Auto"]].map(([k, l]) => (
+                      <button key={k} style={{ ...SS.chip, ...(taskFilter === k ? SS.chipActive : {}) }} onClick={() => setTaskFilter(k)}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                {(() => {
+                  const shown = taskList.filter((t) => taskFilter === "all" ? true : taskFilter === "mine" ? t.createdBy === "user" : t.createdBy !== "user");
+                  if (!shown.length) return <div style={SS.queueEmpty}>{taskFilter === "mine" ? "You haven't assigned any tasks yet — use the composer on the left." : taskFilter === "auto" ? "No auto-generated tasks (AUTO is off or idle)." : "No tasks yet. Add one, or let Jeremiah run the office in Visual."}</div>;
+                  return shown.map((t) => {
+                    const col = STATUS_COLOR[t.status] || "#64786d";
+                    const mine = t.createdBy === "user";
+                    const [sl, sc] = mine ? ["YOU", "#a855f7"] : ["AUTO", "#5e7088"];
+                    return (
+                      <div key={t.id} style={SS.taskRow} onClick={() => setSelected(t.id)}>
+                        <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
+                        <span style={{ ...SS.srcBadge, color: sc, borderColor: `${sc}66`, background: `${sc}1a` }}>{sl}</span>
+                        <span style={SS.taskRowTitle}>{t.title}</span>
+                        {t.assignedTo && byId[t.assignedTo] && <span style={SS.taskRowWho}>{byId[t.assignedTo].name}</span>}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
@@ -487,6 +501,9 @@ export default function AgentOffice() {
             </div>
             <div style={SS.modalTitle}>{selectedTask.title}</div>
             <div style={SS.modalMeta}>
+              <span style={{ ...SS.srcBadge, color: selectedTask.createdBy === "user" ? "#a855f7" : "#5e7088", borderColor: selectedTask.createdBy === "user" ? "#a855f766" : "#5e708866", background: selectedTask.createdBy === "user" ? "#a855f71a" : "#5e70881a", marginRight: 8 }}>
+                {selectedTask.createdBy === "user" ? "ASSIGNED BY YOU" : "AUTO-GENERATED"}
+              </span>
               {selectedTask.department ? (DEPT_OPTS.find((d) => d[0] === selectedTask.department)?.[1] || selectedTask.department) : "Any department"}
               {selectedTask.assignedTo && byId[selectedTask.assignedTo] ? ` · ${byId[selectedTask.assignedTo].name}` : ""}
               {selectedTask.attempts ? ` · attempt ${selectedTask.attempts + 1}` : ""}
@@ -547,6 +564,11 @@ const SS = {
   tasksCompose: { background: "#0c1226", border: "1px solid #1a2440", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 8 },
   composeHint: { fontSize: 10, color: "#5e7088", lineHeight: 1.5 },
   tasksList: { display: "flex", flexDirection: "column", gap: 6 },
+  tasksListHead: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 2 },
+  chipRow: { display: "flex", gap: 6 },
+  chip: { fontSize: 9.5, fontWeight: 700, padding: "5px 11px", borderRadius: 99, border: "1px solid #243358", background: "transparent", color: "#8aa0c0", cursor: "pointer", fontFamily: MONO },
+  chipActive: { background: "#15203f", color: "#e8edff", borderColor: "#3a4a66" },
+  srcBadge: { fontSize: 7.5, fontWeight: 700, padding: "2px 6px", borderRadius: 99, border: "1px solid", letterSpacing: 0.8, flexShrink: 0 },
   taskRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440", cursor: "pointer" },
   taskRowTitle: { fontSize: 12, color: "#e8edff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   taskRowWho: { fontSize: 9, color: "#8aa0c0", letterSpacing: 0.5 },
