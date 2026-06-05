@@ -5,7 +5,7 @@
 
 import {
   bus, getWorkers, getTasks, setAgent, createTask, updateTask, addEvent,
-  createDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials,
+  upsertDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials,
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory } from "./gemini.js";
 import { toolsFor } from "./tools.js";
@@ -95,7 +95,7 @@ async function runTask(agent, task) {
       if (isUser) {
         // Real work only: save the deliverable as a document and fold a note
         // into the department's memory so future tasks continue the work.
-        createDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
+        upsertDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
         const note = await summarizeForMemory(agent, task, result, model).catch(() => `${task.title} — completed.`);
         const label = `${(DEPARTMENTS[agent.department]?.label) || agent.department} memory`;
         appendMemory(agent.department, `- ${note}`, label, agent.name);

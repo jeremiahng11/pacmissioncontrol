@@ -254,17 +254,20 @@ app.post("/api/tasks/:id/followup", (req, reply) => {
   if (!t) return reply.code(404).send({ error: "not found" });
   const instruction = String((req.body || {}).instruction || "").trim();
   if (!instruction) return reply.code(400).send({ error: "instruction required" });
-  // New task that continues from this one's deliverable (the agent builds on it).
-  const ft = createTask({
-    title: instruction.slice(0, 80),
-    prompt: instruction,
-    department: t.department,
-    assignedTo: t.assignedTo || null,
-    createdBy: "user",
-    priorWork: t.result || null,
-    parentId: t.id,
+  // Re-run the SAME task (same thread/project): append the instruction and
+  // re-queue, keeping the current result so the agent builds on it. Its
+  // document updates in place rather than spawning a new task/project.
+  updateTask(t.id, {
+    prompt: `${t.prompt}\n\nFOLLOW-UP (revise the previous deliverable accordingly): ${instruction}`,
+    status: "queued",
+    attempts: 0,
+    startedAt: null,
+    completedAt: null,
+    revisions: (t.revisions || 0) + 1,
+    reviewNotes: "follow-up requested",
   });
-  reply.code(201).send(ft);
+  addEvent({ kind: "system", text: `Jay Jay re-dispatching (revision): ${t.title}`, taskId: t.id });
+  reply.send({ ok: true });
 });
 
 app.delete("/api/tasks/:id", (req, reply) => {

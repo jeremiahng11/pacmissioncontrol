@@ -809,6 +809,7 @@ export default function AgentOffice() {
               {selectedTask.department ? (DEPT_OPTS.find((d) => d[0] === selectedTask.department)?.[1] || selectedTask.department) : "Any department"}
               {selectedTask.assignedTo && byId[selectedTask.assignedTo] ? ` · ${byId[selectedTask.assignedTo].name}` : ""}
               {selectedTask.attempts ? ` · attempt ${selectedTask.attempts + 1}` : ""}
+              {selectedTask.revisions ? ` · rev ${selectedTask.revisions}` : ""}
             </div>
             {selectedTask.prompt && selectedTask.prompt !== selectedTask.title && <div style={SS.modalPrompt}>{selectedTask.prompt}</div>}
             {selectedTask.attachments && selectedTask.attachments.length > 0 && (

@@ -317,7 +317,8 @@ async function persistDocument(d) {
   if (!pool) return;
   await pool.query(
     `INSERT INTO documents (id,task_id,title,prompt,department,agent_id,content,created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (id) DO UPDATE SET title=$3, prompt=$4, content=$7, created_at=$8`,
     [d.id, d.taskId, d.title, d.prompt, d.department, d.agentId, d.content, new Date(d.createdAt)]
   ).catch((e) => console.error("[store] persistDocument", e.message));
 }
@@ -479,6 +480,17 @@ export function clearIssues() {
 
 /* ---------- documents (deliverables) ---------- */
 export const getDocument = (id) => state.documents.find((d) => d.id === id);
+// Update the task's existing document in place (same project/thread), or create
+// it if this is the first deliverable. Keeps follow-ups in one thread.
+export function upsertDocument({ taskId, title, prompt, department, agentId, content }) {
+  const existing = taskId ? state.documents.find((d) => d.taskId === taskId) : null;
+  if (!existing) return createDocument({ taskId, title, prompt, department, agentId, content });
+  Object.assign(existing, { title, prompt: prompt || existing.prompt, content, createdAt: Date.now() });
+  state.documents = [existing, ...state.documents.filter((d) => d.id !== existing.id)];
+  persistDocument(existing);
+  bus.emit("document", serializeDocMeta(existing));
+  return existing;
+}
 export function createDocument({ taskId, title, prompt, department, agentId, content }) {
   const doc = {
     id: randomUUID(), taskId: taskId || null, title, prompt: prompt || "",
