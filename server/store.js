@@ -231,7 +231,24 @@ export function createTask({ title, prompt, department = null, assignedTo = null
   state.tasks.set(task.id, task);
   persistTask(task);
   bus.emit("task", serializeTask(task));
+  pruneTasks();
   return task;
+}
+
+// Keep memory bounded: drop the oldest finished tasks once we exceed a cap.
+function pruneTasks() {
+  const MAX = 150, KEEP = 100;
+  if (state.tasks.size <= MAX) return;
+  const finished = [...state.tasks.values()]
+    .filter((t) => t.status === "done" || t.status === "failed")
+    .sort((a, b) => a.createdAt - b.createdAt);
+  let toRemove = state.tasks.size - KEEP;
+  for (const t of finished) {
+    if (toRemove-- <= 0) break;
+    state.tasks.delete(t.id);
+    if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [t.id]).catch(() => {});
+    bus.emit("task", { id: t.id, deleted: true });
+  }
 }
 
 export function updateTask(id, patch) {

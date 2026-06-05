@@ -189,9 +189,9 @@ const Room = memo(function Room({ room, name, color, cto, status, task, departme
         {sayHere && !cto && <div className="speech" style={{ borderColor: color, color }}>on it!</div>}
         {status === "thinking" && <div className="cue" style={{ color }}>?</div>}
         {status === "idle" && <div className="cue zzz">z z z</div>}
-        <div className={`walker ${busy ? "busy " + walk : ""}`}>
+        <div className={`walker ${busy && !ctoAway ? "busy " + walk : ""}`}>
           <div className="oshadow" style={ctoAway ? { opacity: 0 } : undefined} />
-          {ctoAway ? <div className="cto-away">CTO en route…</div> : <Octo color={color} size={cto ? 76 : 56} status={status} cto={cto} />}
+          {!ctoAway && <Octo color={color} size={cto ? 76 : 56} status={status} cto={cto} />}
         </div>
         <div className="agent-tag" style={{ color }}>{name}</div>
       </div>
@@ -403,6 +403,16 @@ export default function AgentOffice() {
               </div>
             </div>
 
+            {settings.autonomous ? (
+              <div style={SS.autoBanner}>
+                <Bot size={14} /> <b>AUTO mode is ON</b> — Jeremiah is generating its own tasks (the demo). These are real Gemini calls. Turn <b>AUTO OFF</b> to run only the tasks you assign.
+              </div>
+            ) : activeTasks.length === 0 ? (
+              <div style={SS.idleBanner}>
+                Office idle — assign a task in the <b>Tasks</b> tab and Jeremiah will dispatch it. (Or press <b>AUTO ON</b> for the self-running demo.)
+              </div>
+            ) : null}
+
             <div className="rooms" ref={roomsRef} style={{ position: "relative" }}>
               {ROOMS.map((room) => {
                 const a = agents.find((x) => x.room === room), m = META[room];
@@ -539,6 +549,8 @@ const SS = {
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
+  autoBanner: { display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.08)", border: "1px solid rgba(234,179,8,.35)", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
+  idleBanner: { fontSize: 11, color: "#8aa0c0", background: "#0c1226", border: "1px solid #1a2440", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },
   btn: { display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: .5, padding: "8px 11px", borderRadius: 8, cursor: "pointer", fontFamily: MONO, border: "1px solid" },
   gold: { color: "#1a1405", background: "#f5c95b", borderColor: "#f5c95b" },

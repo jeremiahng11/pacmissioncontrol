@@ -10,7 +10,7 @@ import { runWork, runReview, generateTask } from "./gemini.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT } from "./config.js";
 
 const MAX_ATTEMPTS = 2;
-const GEN_COOLDOWN_MS = 4000;
+const GEN_COOLDOWN_MS = 9000; // calmer autonomous cadence when AUTO is on
 
 const settings = { paused: false, autonomous: AUTONOMOUS_DEFAULT };
 const busy = new Set(); // agent ids currently running a task

@@ -18,7 +18,10 @@ export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
 export const SIMULATE = !GEMINI_API_KEY;
 
 export const TICK_MS = Number(process.env.TICK_MS || 1500);
-export const AUTONOMOUS_DEFAULT = process.env.AUTONOMOUS !== "false";
+// OFF by default: the office only works on tasks YOU assign. Flip on with the
+// AUTO button (or AUTONOMOUS=true) for the self-running demo. Keeping it off
+// also avoids continuous paid Gemini calls when the app is left running.
+export const AUTONOMOUS_DEFAULT = process.env.AUTONOMOUS === "true";
 
 export const IS_PROD = process.env.NODE_ENV === "production";
 
