@@ -1,10 +1,9 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
-# One Node web service (React app + REST + WebSocket + CTO orchestrator) backed
-# by a managed Postgres database. Set AUTH_*/GEMINI_API_KEY in the dashboard.
-databases:
-  - name: mission-control-db
-    plan: free
-
+# One Node web service (React app + REST + WebSocket + CTO orchestrator).
+# Render free tier allows only ONE Postgres per account, so this blueprint does
+# NOT create a database. Reuse your existing free Postgres: paste its Internal
+# Database URL into DATABASE_URL when prompted. Our tables live in a dedicated
+# `mission_control` schema, so sharing a DB with another app is safe.
 services:
   - type: web
     name: mission-control
@@ -18,9 +17,7 @@ services:
       - key: NODE_VERSION
         value: 22.22.3
       - key: DATABASE_URL
-        fromDatabase:
-          name: mission-control-db
-          property: connectionString
+        sync: false
       - key: SESSION_SECRET
         generateValue: true
       - key: AUTH_USERNAME

@@ -59,9 +59,19 @@ export function serializeTask(t) {
 }
 
 /* ---------- boot ---------- */
+const SCHEMA = process.env.DB_SCHEMA || "mission_control";
+
 export async function initStore() {
   if (DATABASE_URL) {
-    pool = new Pool({ connectionString: DATABASE_URL, ssl: needsSsl(DATABASE_URL), max: 5 });
+    // Keep our tables in their own schema so the DB can be safely shared with
+    // another app (Render free tier allows only one Postgres per account).
+    pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: needsSsl(DATABASE_URL),
+      max: 5,
+      options: `-c search_path=${SCHEMA}`,
+    });
+    await pool.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
     await migrate();
   }
   await loadAgents();
