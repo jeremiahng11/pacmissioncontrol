@@ -666,7 +666,12 @@ export default function AgentOffice() {
 
         {view === "memory" && <MemoryView memory={memory} onDelete={deleteMemory} />}
 
-        {view === "issues" && <IssuesView issues={issues} byId={byId} onResolve={resolveIssue} onRetry={(i) => { if (i.taskId) retryTask(i.taskId); resolveIssue(i.id); }} />}
+        {view === "issues" && <IssuesView issues={issues} byId={byId} onResolve={resolveIssue} onRetry={(i) => {
+          if (!i.taskId) { alert("This issue has no task to retry — dismissing it."); resolveIssue(i.id); return; }
+          retryTask(i.taskId)
+            .then(() => { resolveIssue(i.id); })
+            .catch((e) => alert("Couldn't retry: " + e.message + (/not found/i.test(e.message) ? " (the task was deleted — dismiss this issue and re-assign the task)" : "")));
+        }} />}
 
         {PLACEHOLDER[view] && <Placeholder icon={PLACEHOLDER[view].icon} title={PLACEHOLDER[view].title} desc={PLACEHOLDER[view].desc} />}
       </main>
@@ -708,7 +713,7 @@ export default function AgentOffice() {
             <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
             {selectedTask.reviewNotes && !["failed", "blocked"].includes(selectedTask.status) && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
             <div style={SS.modalActions}>
-              {["failed", "blocked"].includes(selectedTask.status) && <button style={SS.continueBtn} onClick={() => retryTask(selectedTask.id)}><RotateCw size={13} /> CONTINUE TASK</button>}
+              {["failed", "blocked"].includes(selectedTask.status) && <button style={SS.continueBtn} onClick={() => retryTask(selectedTask.id).then(() => alert("Jay Jay is re-dispatching this task — watch the Visual office. If it blocks again, it's the Gemini quota/model.")).catch((e) => alert("Couldn't continue: " + e.message + (/not found/i.test(e.message) ? " (the task no longer exists — re-assign it fresh)" : "")))}><RotateCw size={13} /> CONTINUE TASK</button>}
               {(() => { const td = documents.find((d) => d.taskId === selectedTask.id); return td ? <button style={SS.downloadBtn} onClick={() => downloadDoc(td.id)}><Download size={13} /> DOWNLOAD .DOC</button> : null; })()}
               <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
             </div>

@@ -321,6 +321,13 @@ export function resolveIssue(id) {
   bus.emit("issue", { id, resolved: true });
   return true;
 }
+function deleteIssuesForTask(taskId) {
+  const removed = state.issues.filter((i) => i.taskId === taskId);
+  if (!removed.length) return;
+  state.issues = state.issues.filter((i) => i.taskId !== taskId);
+  if (pool) pool.query("DELETE FROM issues WHERE task_id=$1", [taskId]).catch(() => {});
+  for (const i of removed) bus.emit("issue", { id: i.id, resolved: true });
+}
 
 /* ---------- documents (deliverables) ---------- */
 export const getDocument = (id) => state.documents.find((d) => d.id === id);
@@ -441,6 +448,7 @@ export function deleteTask(id) {
   if (!t) return false;
   state.tasks.delete(id);
   deleteAttachmentsForTask(id);
+  deleteIssuesForTask(id);
   if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [id]).catch(() => {});
   bus.emit("task", { id, deleted: true });
   return true;
@@ -459,6 +467,8 @@ export function clearTasks(scope = "done") {
   const ids = getTasks().filter(match).map((t) => t.id);
   for (const id of ids) {
     state.tasks.delete(id);
+    deleteAttachmentsForTask(id);
+    deleteIssuesForTask(id);
     if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [id]).catch(() => {});
   }
   if (ids.length) bus.emit("tasksReset", getTasks().map(serializeTask));
