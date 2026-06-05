@@ -314,10 +314,10 @@ export function createIssue({ kind, title, detail, taskId, agentId }) {
   return issue;
 }
 export function resolveIssue(id) {
-  const i = state.issues.find((x) => x.id === id);
-  if (!i) return false;
-  i.resolved = true;
-  persistIssue(i);
+  const idx = state.issues.findIndex((x) => x.id === id);
+  if (idx < 0) return false;
+  state.issues.splice(idx, 1); // dismiss = delete permanently
+  if (pool) pool.query("DELETE FROM issues WHERE id=$1", [id]).catch(() => {});
   bus.emit("issue", { id, resolved: true });
   return true;
 }
