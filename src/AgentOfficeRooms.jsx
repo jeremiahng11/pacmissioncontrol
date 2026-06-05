@@ -284,7 +284,7 @@ function DocsView({ documents, byId, onOpen }) {
   );
 }
 
-function MemoryView({ memory }) {
+function MemoryView({ memory, onDelete }) {
   const sorted = [...memory].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   return (
     <div style={SS.libWrap}>
@@ -294,7 +294,11 @@ function MemoryView({ memory }) {
       <div style={SS.memGrid}>
         {sorted.map((m) => (
           <div key={m.scope} style={SS.memCard}>
-            <div style={SS.memHead}><Brain size={13} color="#a855f7" /> {deptLabel(m.scope)}<span style={SS.memWhen}>updated {fmtWhen(m.updatedAt)}</span></div>
+            <div style={SS.memHead}>
+              <Brain size={13} color="#a855f7" /> {deptLabel(m.scope)}
+              <span style={SS.memWhen}>updated {fmtWhen(m.updatedAt)}</span>
+              <button style={SS.memDel} title="Clear this department's memory" onClick={() => { if (confirm(`Clear all ${deptLabel(m.scope)} memory? This can't be undone.`)) onDelete(m.scope); }}><Trash2 size={12} /></button>
+            </div>
             <pre style={SS.memContent}>{m.content || "(empty)"}</pre>
           </div>
         ))}
@@ -343,7 +347,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, resolveIssue } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -590,7 +594,7 @@ export default function AgentOffice() {
 
         {view === "docs" && <DocsView documents={documents} byId={byId} onOpen={openDoc} />}
 
-        {view === "memory" && <MemoryView memory={memory} />}
+        {view === "memory" && <MemoryView memory={memory} onDelete={deleteMemory} />}
 
         {view === "issues" && <IssuesView issues={issues} byId={byId} onResolve={resolveIssue} />}
 
@@ -636,6 +640,7 @@ export default function AgentOffice() {
             {doc.prompt && <><div style={SS.secTitle}>ASSIGNED TASK</div><div style={SS.modalPrompt}>{doc.prompt}</div></>}
             <div style={SS.secTitle}>OUTPUT</div>
             <div style={SS.resultBox}>{doc.content}</div>
+            <button style={SS.delBtn} onClick={() => { if (confirm("Delete this document?")) { deleteDocument(doc.id); setDoc(null); } }}><Trash2 size={13} /> DELETE DOCUMENT</button>
           </div>
         </div>
       )}
@@ -730,6 +735,7 @@ const SS = {
   memCard: { background: "#0c1226", border: "1px solid #1a2440", borderRadius: 12, padding: 14 },
   memHead: { display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 800, color: "#e8edff" },
   memWhen: { marginLeft: "auto", fontSize: 9, color: "#5e7088", fontWeight: 400 },
+  memDel: { marginLeft: 6, display: "flex", alignItems: "center", padding: 4, borderRadius: 6, border: "1px solid rgba(251,85,112,.3)", background: "rgba(251,85,112,.08)", color: "#fca5b5", cursor: "pointer" },
   memContent: { margin: "10px 0 0", fontFamily: MONO, fontSize: 11, color: "#9db0c8", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 240, overflowY: "auto" },
   // placeholder
   placeholder: { minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, textAlign: "center" },

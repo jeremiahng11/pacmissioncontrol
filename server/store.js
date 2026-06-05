@@ -305,8 +305,24 @@ export function createDocument({ taskId, title, prompt, department, agentId, con
   return doc;
 }
 
+export function deleteDocument(id) {
+  const i = state.documents.findIndex((d) => d.id === id);
+  if (i < 0) return false;
+  state.documents.splice(i, 1);
+  if (pool) pool.query("DELETE FROM documents WHERE id=$1", [id]).catch(() => {});
+  bus.emit("document", { id, deleted: true });
+  return true;
+}
+
 /* ---------- memory (rolling knowledge base per department) ---------- */
 export const getMemoryText = (scope) => state.memory.get(scope)?.content || "";
+export function deleteMemory(scope) {
+  if (!state.memory.has(scope)) return false;
+  state.memory.delete(scope);
+  if (pool) pool.query("DELETE FROM memory WHERE scope=$1", [scope]).catch(() => {});
+  bus.emit("memory", { scope, deleted: true });
+  return true;
+}
 export function upsertMemory(scope, { title, content, updatedBy }) {
   let m = state.memory.get(scope);
   if (!m) { m = { scope, title: title || scope, content: content || "", updatedAt: Date.now(), updatedBy: updatedBy || "system" }; state.memory.set(scope, m); }

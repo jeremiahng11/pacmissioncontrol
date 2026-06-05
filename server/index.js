@@ -13,7 +13,8 @@ import { WebSocketServer } from "ws";
 import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
-  initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, getDocument, resolveIssue,
+  initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask,
+  getDocument, deleteDocument, deleteMemory, resolveIssue,
 } from "./store.js";
 import {
   startOrchestrator, dispatchNow, allHands, clockOut, getSettings, setSetting,
@@ -95,6 +96,14 @@ app.get("/api/documents/:id", (req, reply) => {
   const d = getDocument(req.params.id);
   if (!d) return reply.code(404).send({ error: "not found" });
   reply.send(d);
+});
+
+app.delete("/api/documents/:id", (req, reply) => {
+  reply.code(deleteDocument(req.params.id) ? 204 : 404).send();
+});
+
+app.delete("/api/memory/:scope", (req, reply) => {
+  reply.code(deleteMemory(req.params.scope) ? 204 : 404).send();
 });
 
 app.post("/api/issues/:id/resolve", (req, reply) => {

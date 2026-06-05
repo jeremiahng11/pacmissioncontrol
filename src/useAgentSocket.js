@@ -61,8 +61,14 @@ export function useAgentSocket() {
             break;
           case "tasks": setTasks(Object.fromEntries((m.tasks || []).map((t) => [t.id, t]))); break;
           case "event": setEvents((p) => [m.event, ...p].slice(0, 60)); break;
-          case "document": setDocuments((p) => [m.document, ...p.filter((d) => d.id !== m.document.id)].slice(0, 60)); break;
-          case "memory": setMemory((p) => [m.memory, ...p.filter((x) => x.scope !== m.memory.scope)]); break;
+          case "document":
+            if (m.document.deleted) setDocuments((p) => p.filter((d) => d.id !== m.document.id));
+            else setDocuments((p) => [m.document, ...p.filter((d) => d.id !== m.document.id)].slice(0, 60));
+            break;
+          case "memory":
+            if (m.memory.deleted) setMemory((p) => p.filter((x) => x.scope !== m.memory.scope));
+            else setMemory((p) => [m.memory, ...p.filter((x) => x.scope !== m.memory.scope)]);
+            break;
           case "issue":
             if (m.issue.resolved) setIssues((p) => p.filter((i) => i.id !== m.issue.id));
             else setIssues((p) => [m.issue, ...p.filter((i) => i.id !== m.issue.id)]);
@@ -86,7 +92,9 @@ export function useAgentSocket() {
     location.href = "/login";
   }, []);
   const openDocument = useCallback((id) => api.document(id), []);
+  const deleteDocument = useCallback((id) => api.deleteDocument(id).catch(() => {}), []);
+  const deleteMemory = useCallback((scope) => api.deleteMemory(scope).catch(() => {}), []);
   const resolveIssue = useCallback((id) => api.resolveIssue(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, resolveIssue };
+  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue };
 }
