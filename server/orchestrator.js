@@ -5,8 +5,10 @@
 
 import {
   bus, getWorkers, getTasks, setAgent, createTask, updateTask, addEvent,
+  createDocument, getMemoryText, appendMemory,
 } from "./store.js";
-import { runWork, runReview, generateTask } from "./gemini.js";
+import { runWork, runReview, generateTask, summarizeForMemory } from "./gemini.js";
+import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT } from "./config.js";
 
 const MAX_ATTEMPTS = 2;
@@ -45,7 +47,8 @@ async function runTask(agent, task) {
     await wait(800 + Math.random() * 700);
 
     setAgent(agent.id, { status: "working", task: task.title });
-    const result = await runWork(agent, task);
+    const memoryText = getMemoryText(agent.department);
+    const result = await runWork(agent, task, memoryText);
     updateTask(task.id, { status: "review", result });
 
     setAgent(agent.id, { status: "thinking", task: `wrapping up: ${task.title}` });
@@ -54,6 +57,12 @@ async function runTask(agent, task) {
 
     if (verdict.complete) {
       updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note });
+      // Save the deliverable as a document and fold a note into the
+      // department's memory so future tasks continue the work.
+      createDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
+      const note = await summarizeForMemory(agent, task, result);
+      const label = `${(DEPARTMENTS[agent.department]?.label) || agent.department} memory`;
+      appendMemory(agent.department, `- ${note}`, label, agent.name);
       addEvent({ kind: "done", text: `Jeremiah ✓ ${agent.name}: ${task.title} — ${verdict.note}`, agentId: agent.id, taskId: task.id });
     } else if ((task.attempts || 0) + 1 < MAX_ATTEMPTS) {
       updateTask(task.id, { status: "queued", attempts: (task.attempts || 0) + 1, assignedTo: agent.id, startedAt: null, reviewNotes: verdict.note });

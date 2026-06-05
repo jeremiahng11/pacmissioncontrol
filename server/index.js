@@ -13,7 +13,7 @@ import { WebSocketServer } from "ws";
 import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
-  initStore, snapshot, bus, createTask, deleteTask, getTask,
+  initStore, snapshot, bus, createTask, deleteTask, getTask, getDocument,
 } from "./store.js";
 import {
   startOrchestrator, dispatchNow, allHands, clockOut, getSettings, setSetting,
@@ -91,6 +91,12 @@ app.get("/api/tasks/:id", (req, reply) => {
   reply.send(t);
 });
 
+app.get("/api/documents/:id", (req, reply) => {
+  const d = getDocument(req.params.id);
+  if (!d) return reply.code(404).send({ error: "not found" });
+  reply.send(d);
+});
+
 app.delete("/api/tasks/:id", (req, reply) => {
   const ok = deleteTask(req.params.id);
   reply.code(ok ? 204 : 404).send();
@@ -126,7 +132,7 @@ app.setNotFoundHandler((req, reply) => {
 const sockets = new Set();
 const wss = new WebSocketServer({ noServer: true });
 
-for (const type of ["agent", "task", "event", "settings"]) {
+for (const type of ["agent", "task", "event", "settings", "document", "memory"]) {
   bus.on(type, (payload) => {
     const frame = JSON.stringify(type === "settings" ? { type, settings: payload } : { type, [type]: payload });
     for (const ws of sockets) {

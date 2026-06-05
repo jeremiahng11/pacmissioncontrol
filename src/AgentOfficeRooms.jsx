@@ -46,9 +46,11 @@ const PLACEHOLDER = {
   content:  { icon: Satellite, title: "Content",  desc: "Plan and track the content your agents produce." },
   calendar: { icon: Calendar,  title: "Calendar", desc: "Scheduled runs and upcoming agent tasks." },
   projects: { icon: Rocket,    title: "Projects", desc: "Group missions into projects and follow their progress." },
-  memory:   { icon: Brain,     title: "Memory",   desc: "What the agents remember across runs." },
-  docs:     { icon: FileText,  title: "Docs",     desc: "Generated documents and deliverables from the team." },
 };
+
+const DEPT_LABEL = { command: "CTO Office", observatory: "Observatory", security: "Security", research_lab: "Research Lab", development: "Development Center", admin: "Admin" };
+const deptLabel = (k) => DEPT_LABEL[k] || k || "";
+const fmtWhen = (ms) => { try { return new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 
 const TEAM = [
   { section: "GROUP CTO", members: [
@@ -253,6 +255,50 @@ function TeamView({ live, model }) {
   );
 }
 
+function DocsView({ documents, byId, onOpen }) {
+  return (
+    <div style={SS.libWrap}>
+      <h1 style={SS.h1}><FileText size={20} /> Docs</h1>
+      <div style={SS.libSub}>Deliverables your agents produced. Each one is linked to the task it came from — click to read the full output.</div>
+      {documents.length === 0 && <div style={SS.queueEmpty}>No documents yet. Assign a task (e.g. research) — the completed deliverable lands here.</div>}
+      <div style={SS.docsList}>
+        {documents.map((d) => {
+          const who = d.agentId && byId[d.agentId];
+          return (
+            <div key={d.id} style={SS.docRow} onClick={() => onOpen(d.id)}>
+              <div style={SS.docRowHead}>
+                <span style={SS.docTitle}>{d.title}</span>
+                <span style={SS.docWhen}>{fmtWhen(d.createdAt)}</span>
+              </div>
+              <div style={SS.docMeta}>{who ? who.name : ""}{d.department ? ` · ${deptLabel(d.department)}` : ""}</div>
+              <div style={SS.docSnippet}>{d.snippet}{d.snippet && d.snippet.length >= 160 ? "…" : ""}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MemoryView({ memory }) {
+  const sorted = [...memory].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  return (
+    <div style={SS.libWrap}>
+      <h1 style={SS.h1}><Brain size={20} /> Memory</h1>
+      <div style={SS.libSub}>What the agents remember. Each department keeps a rolling knowledge base it reads before new work and adds to after — so tasks build on each other.</div>
+      {sorted.length === 0 && <div style={SS.queueEmpty}>No memory yet. As agents complete tasks, they record key facts here to continue from next time.</div>}
+      <div style={SS.memGrid}>
+        {sorted.map((m) => (
+          <div key={m.scope} style={SS.memCard}>
+            <div style={SS.memHead}><Brain size={13} color="#a855f7" /> {deptLabel(m.scope)}<span style={SS.memWhen}>updated {fmtWhen(m.updatedAt)}</span></div>
+            <pre style={SS.memContent}>{m.content || "(empty)"}</pre>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Placeholder({ icon: Icon, title, desc }) {
   return (
     <div style={SS.placeholder}>
@@ -265,10 +311,11 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, settings, gemini, model, connected, assignTask, deleteTask, control, logout } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, control, logout, openDocument } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
+  const [doc, setDoc] = useState(null);
   const [say, setSay] = useState(null);
   const [courier, setCourier] = useState(null);
   const [taskFilter, setTaskFilter] = useState("all");
@@ -290,6 +337,7 @@ export default function AgentOffice() {
   const selectedTask = selected ? tasks[selected] : null;
 
   const onPick = useCallback((department) => setForm((f) => ({ ...f, department })), []);
+  const openDoc = useCallback((id) => { openDocument(id).then(setDoc).catch(() => {}); }, [openDocument]);
 
   // Courier: Jeremiah walks Command HQ -> agent room -> back. One trip at a
   // time; trips chain without dropping the sprite, so HQ never flickers.
@@ -499,6 +547,10 @@ export default function AgentOffice() {
 
         {view === "team" && <TeamView live={live} model={model} />}
 
+        {view === "docs" && <DocsView documents={documents} byId={byId} onOpen={openDoc} />}
+
+        {view === "memory" && <MemoryView memory={memory} />}
+
         {PLACEHOLDER[view] && <Placeholder icon={PLACEHOLDER[view].icon} title={PLACEHOLDER[view].title} desc={PLACEHOLDER[view].desc} />}
       </main>
 
@@ -523,6 +575,24 @@ export default function AgentOffice() {
             <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
             {selectedTask.reviewNotes && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
             <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
+          </div>
+        </div>
+      )}
+
+      {doc && (
+        <div style={SS.modalBg} onClick={() => setDoc(null)}>
+          <div style={SS.modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={SS.modalHead}>
+              <span style={{ ...SS.pill, color: "#38bdf8", borderColor: "#38bdf866", background: "#38bdf81a" }}><FileText size={9} style={{ verticalAlign: "-1px", marginRight: 3 }} />DOCUMENT</span>
+              <button style={SS.modalClose} onClick={() => setDoc(null)}><X size={16} /></button>
+            </div>
+            <div style={SS.modalTitle}>{doc.title}</div>
+            <div style={SS.modalMeta}>
+              {doc.agentId && byId[doc.agentId] ? `${byId[doc.agentId].name} · ` : ""}{deptLabel(doc.department)} · {fmtWhen(doc.createdAt)}
+            </div>
+            {doc.prompt && <><div style={SS.secTitle}>ASSIGNED TASK</div><div style={SS.modalPrompt}>{doc.prompt}</div></>}
+            <div style={SS.secTitle}>OUTPUT</div>
+            <div style={SS.resultBox}>{doc.content}</div>
           </div>
         </div>
       )}
@@ -592,6 +662,21 @@ const SS = {
   assignBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px", borderRadius: 7, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   queueEmpty: { fontSize: 11, color: "#5e7088", lineHeight: 1.5, padding: "6px 2px" },
   pill: { fontSize: 7.5, fontWeight: 700, padding: "2px 6px", borderRadius: 99, border: "1px solid", letterSpacing: 0.8, flexShrink: 0 },
+  // docs + memory
+  libWrap: { display: "flex", flexDirection: "column", gap: 6 },
+  libSub: { fontSize: 11.5, color: "#7a8aa0", marginBottom: 10, lineHeight: 1.45, maxWidth: 640 },
+  docsList: { display: "flex", flexDirection: "column", gap: 8 },
+  docRow: { background: "#0c1226", border: "1px solid #1a2440", borderRadius: 10, padding: "11px 13px", cursor: "pointer" },
+  docRowHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 },
+  docTitle: { fontSize: 13, fontWeight: 700, color: "#e8edff" },
+  docWhen: { fontSize: 9.5, color: "#5e7088", flexShrink: 0 },
+  docMeta: { fontSize: 10, color: "#8aa0c0", marginTop: 3, letterSpacing: 0.3 },
+  docSnippet: { fontSize: 11, color: "#9db0c8", marginTop: 7, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" },
+  memGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(300px,1fr))", gap: 12 },
+  memCard: { background: "#0c1226", border: "1px solid #1a2440", borderRadius: 12, padding: 14 },
+  memHead: { display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 800, color: "#e8edff" },
+  memWhen: { marginLeft: "auto", fontSize: 9, color: "#5e7088", fontWeight: 400 },
+  memContent: { margin: "10px 0 0", fontFamily: MONO, fontSize: 11, color: "#9db0c8", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 240, overflowY: "auto" },
   // placeholder
   placeholder: { minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, textAlign: "center" },
   placeholderIcon: { width: 80, height: 80, borderRadius: 18, display: "grid", placeItems: "center", background: "#0c1226", border: "1px solid #1a2440", marginBottom: 6 },

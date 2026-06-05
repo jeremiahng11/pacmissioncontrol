@@ -31,20 +31,39 @@ const SIM = {
 };
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-/* Worker performs the task. */
-export async function runWork(agent, task) {
+/* Worker performs the task, building on the department's memory. */
+export async function runWork(agent, task, memoryText = "") {
   if (!ai) {
     await wait(1200 + Math.random() * 1800);
-    return `Done: ${task.title}.\n\n(Simulated deliverable — set GEMINI_API_KEY to have ${agent.name} produce real work with Gemini Flash.)`;
+    const cont = memoryText ? " (continuing from earlier notes)" : "";
+    return `Done: ${task.title}${cont}.\n\n(Simulated deliverable — set GEMINI_API_KEY to have ${agent.name} produce real work.)`;
   }
   try {
+    const memBlock = memoryText
+      ? `\n\nNOTES FROM EARLIER WORK (build on these, continue and add to them, don't repeat):\n${memoryText}`
+      : "";
     const out = await generate(
       `${agent.persona} Produce the deliverable directly and concisely (short paragraphs or a tight list). No preamble.`,
-      `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}`
+      `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}`
     );
     return out || `Done: ${task.title}.`;
   } catch (e) {
     return `⚠️ ${agent.name} could not complete via Gemini: ${e.message}`;
+  }
+}
+
+/* One-line memory note so future related tasks can continue the work. */
+export async function summarizeForMemory(agent, task, result) {
+  if (!ai) return `${task.title} — completed.`;
+  try {
+    const txt = await generate(
+      "In ONE short line (max 18 words), note what was done and any key fact worth remembering for future related work. No preamble.",
+      `TASK: ${task.title}\nRESULT:\n${result}`,
+      { temperature: 0.3 }
+    );
+    return (txt || "").replace(/\s+/g, " ").slice(0, 180) || `${task.title} — completed.`;
+  } catch {
+    return `${task.title} — completed.`;
   }
 }
 

@@ -18,6 +18,8 @@ const state = {
   agents: new Map(), // id -> agent (includes persona/department; not serialized)
   tasks: new Map(), // id -> task
   events: [], // newest-first, capped
+  documents: [], // newest-first deliverables (durable, not pruned with the queue)
+  memory: new Map(), // scope (department) -> rolling knowledge base
 };
 let eventSeq = 1;
 let pool = null;
@@ -75,7 +77,7 @@ export async function initStore() {
     await migrate();
   }
   await loadAgents();
-  if (pool) await loadTasks();
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); }
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
 }
 
@@ -97,9 +99,34 @@ async function migrate() {
       id bigserial PRIMARY KEY, ts timestamptz DEFAULT now(),
       kind text, text text, agent_id text, task_id text
     );
+    CREATE TABLE IF NOT EXISTS documents (
+      id text PRIMARY KEY, task_id text, title text, prompt text,
+      department text, agent_id text, content text, created_at timestamptz DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS memory (
+      scope text PRIMARY KEY, title text, content text,
+      updated_at timestamptz DEFAULT now(), updated_by text
+    );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
+    CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at DESC);
   `);
+}
+
+async function loadDocuments() {
+  const { rows } = await pool.query("SELECT * FROM documents ORDER BY created_at DESC LIMIT 300");
+  for (const r of rows) state.documents.push({
+    id: r.id, taskId: r.task_id, title: r.title, prompt: r.prompt,
+    department: r.department, agentId: r.agent_id, content: r.content,
+    createdAt: new Date(r.created_at).getTime(),
+  });
+}
+async function loadMemory() {
+  const { rows } = await pool.query("SELECT * FROM memory");
+  for (const r of rows) state.memory.set(r.scope, {
+    scope: r.scope, title: r.title, content: r.content,
+    updatedAt: new Date(r.updated_at).getTime(), updatedBy: r.updated_by,
+  });
 }
 
 async function loadAgents() {
@@ -177,6 +204,22 @@ async function persistEvent(e) {
       [e.kind, e.text, e.agentId || null, e.taskId || null])
     .catch((err) => console.error("[store] persistEvent", err.message));
 }
+async function persistDocument(d) {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO documents (id,task_id,title,prompt,department,agent_id,content,created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING`,
+    [d.id, d.taskId, d.title, d.prompt, d.department, d.agentId, d.content, new Date(d.createdAt)]
+  ).catch((e) => console.error("[store] persistDocument", e.message));
+}
+async function persistMemory(m) {
+  if (!pool) return;
+  await pool.query(
+    `INSERT INTO memory (scope,title,content,updated_at,updated_by) VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (scope) DO UPDATE SET title=$2, content=$3, updated_at=$4, updated_by=$5`,
+    [m.scope, m.title, m.content, new Date(m.updatedAt), m.updatedBy]
+  ).catch((e) => console.error("[store] persistMemory", e.message));
+}
 
 /* ---------- reads ---------- */
 export const getAgent = (id) => state.agents.get(id);
@@ -185,12 +228,51 @@ export const getWorkers = () => getAgents().filter((a) => !a.cto);
 export const getTasks = () => [...state.tasks.values()];
 export const getTask = (id) => state.tasks.get(id);
 
+const serializeDocMeta = (d) => ({
+  id: d.id, taskId: d.taskId, title: d.title, department: d.department,
+  agentId: d.agentId, createdAt: d.createdAt, snippet: (d.content || "").slice(0, 160),
+});
+const serializeMemory = (m) => ({ scope: m.scope, title: m.title, content: m.content, updatedAt: m.updatedAt, updatedBy: m.updatedBy });
+
 export function snapshot() {
   return {
     agents: getAgents().map(serializeAgent),
     tasks: getTasks().map(serializeTask),
     events: state.events.slice(0, 60),
+    documents: state.documents.slice(0, 60).map(serializeDocMeta),
+    memory: [...state.memory.values()].map(serializeMemory),
   };
+}
+
+/* ---------- documents (deliverables) ---------- */
+export const getDocument = (id) => state.documents.find((d) => d.id === id);
+export function createDocument({ taskId, title, prompt, department, agentId, content }) {
+  const doc = {
+    id: randomUUID(), taskId: taskId || null, title, prompt: prompt || "",
+    department: department || null, agentId: agentId || null, content: content || "",
+    createdAt: Date.now(),
+  };
+  state.documents.unshift(doc);
+  if (state.documents.length > 400) state.documents.length = 400;
+  persistDocument(doc);
+  bus.emit("document", serializeDocMeta(doc));
+  return doc;
+}
+
+/* ---------- memory (rolling knowledge base per department) ---------- */
+export const getMemoryText = (scope) => state.memory.get(scope)?.content || "";
+export function upsertMemory(scope, { title, content, updatedBy }) {
+  let m = state.memory.get(scope);
+  if (!m) { m = { scope, title: title || scope, content: content || "", updatedAt: Date.now(), updatedBy: updatedBy || "system" }; state.memory.set(scope, m); }
+  else { if (title) m.title = title; m.content = content; m.updatedAt = Date.now(); m.updatedBy = updatedBy || m.updatedBy; }
+  if (m.content.length > 4000) m.content = m.content.slice(m.content.length - 4000); // keep recent
+  persistMemory(m);
+  bus.emit("memory", serializeMemory(m));
+  return m;
+}
+export function appendMemory(scope, line, title, updatedBy) {
+  const cur = getMemoryText(scope);
+  return upsertMemory(scope, { title, content: (cur ? cur + "\n" : "") + line, updatedBy });
 }
 
 /* ---------- mutations (memory + persist + emit) ---------- */

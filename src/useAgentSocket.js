@@ -9,6 +9,8 @@ export function useAgentSocket() {
   const [agents, setAgents] = useState({});
   const [tasks, setTasks] = useState({});
   const [events, setEvents] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [memory, setMemory] = useState([]);
   const [settings, setSettings] = useState({ paused: false, autonomous: true });
   const [gemini, setGemini] = useState(false);
   const [model, setModel] = useState("");
@@ -24,6 +26,8 @@ export function useAgentSocket() {
       setAgents(Object.fromEntries((s.agents || []).map((a) => [a.id, a])));
       setTasks(Object.fromEntries((s.tasks || []).map((t) => [t.id, t])));
       setEvents(s.events || []);
+      setDocuments(s.documents || []);
+      setMemory(s.memory || []);
       if (s.settings) setSettings(s.settings);
       if (typeof s.gemini === "boolean") setGemini(s.gemini);
       if (typeof s.model === "string") setModel(s.model);
@@ -54,6 +58,8 @@ export function useAgentSocket() {
             else setTasks((p) => ({ ...p, [m.task.id]: m.task }));
             break;
           case "event": setEvents((p) => [m.event, ...p].slice(0, 60)); break;
+          case "document": setDocuments((p) => [m.document, ...p.filter((d) => d.id !== m.document.id)].slice(0, 60)); break;
+          case "memory": setMemory((p) => [m.memory, ...p.filter((x) => x.scope !== m.memory.scope)]); break;
           case "settings": setSettings(m.settings); break;
           default: break;
         }
@@ -71,6 +77,7 @@ export function useAgentSocket() {
     await api.logout().catch(() => {});
     location.href = "/login";
   }, []);
+  const openDocument = useCallback((id) => api.document(id), []);
 
-  return { agents, tasks, events, settings, gemini, model, connected, assignTask, deleteTask, control, logout };
+  return { agents, tasks, events, documents, memory, settings, gemini, model, connected, assignTask, deleteTask, control, logout, openDocument };
 }

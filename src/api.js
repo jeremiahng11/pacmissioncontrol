@@ -20,6 +20,7 @@ async function req(path, opts = {}) {
 
 export const api = {
   state: () => req("/api/state"),
+  document: (id) => req(`/api/documents/${id}`),
   createTask: (t) => req("/api/tasks", { method: "POST", body: JSON.stringify(t) }),
   deleteTask: (id) => req(`/api/tasks/${id}`, { method: "DELETE" }),
   control: (action, extra = {}) =>
