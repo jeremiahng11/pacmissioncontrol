@@ -1,0 +1,19 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Static Site: Vite builds the client bundle, Render serves dist/ on a CDN.
+# When the Django/Channels backend lands, add a second `web` service here.
+services:
+  - type: web
+    name: mission-control
+    runtime: static
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: true
+    # SPA fallback so deep links resolve to the app shell.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

@@ -7,7 +7,12 @@
       "Bash(git ls-remote *)",
       "Bash(git fetch *)",
       "Bash(git ls-tree *)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(npm --version)",
+      "Read(//Users/jeremiah/.nvm/versions/node/**)",
+      "Bash(brew list *)",
+      "Read(//usr/local/opt/**)",
+      "Bash(git mv *)"
     ]
   }
 }
