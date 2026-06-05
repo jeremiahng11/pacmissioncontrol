@@ -27,7 +27,8 @@
       "Bash(qlmanage -t -s 1400 -o /tmp/vid \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\")",
       "Read(//tmp/**)",
       "Bash(cp \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\" /tmp/vid/rec.mov 2>&1 && echo \"copied OK\" && ls -la /tmp/vid/rec.mov)",
-      "Bash(cp \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\" /tmp/vid/rec.mov && echo \"copied OK\" && ls -la /tmp/vid/rec.mov)"
+      "Bash(cp \"/Users/jeremiah/Desktop/Screen Recording 2026-06-05 at 11.22.14 AM.mov\" /tmp/vid/rec.mov && echo \"copied OK\" && ls -la /tmp/vid/rec.mov)",
+      "WebFetch(domain:render.com)"
     ],
     "additionalDirectories": [
       "/Users/jeremiah/Desktop",

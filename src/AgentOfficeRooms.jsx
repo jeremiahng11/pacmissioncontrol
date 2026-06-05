@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Gamepad2, Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, Users, User } from "lucide-react";
+import React, { useState, useEffect, useRef, useCallback, memo } from "react";
+import {
+  Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User,
+} from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
 /* ------------------------------------------------------------------ *
  *  MISSION CONTROL — AGENT OFFICE
  *  Live: agents render from {status, task} over the WebSocket. When the
- *  CTO assigns a task, Jeremiah (purple) walks across the office to the
- *  agent's room to deliver it, then returns to Command HQ. The Team view
- *  shows the full roster, with the human Group CTO at the top.
+ *  CTO assigns a task, Jeremiah walks across the office to the agent's
+ *  room to deliver it, then returns. Heavy room art and sprites are
+ *  memoized so frequent socket updates don't re-render (and flicker).
  * ------------------------------------------------------------------ */
 
 const AGENTS = [
@@ -28,7 +31,25 @@ const DEPT_OPTS = [
   ["admin", "Admin · Vault"],
 ];
 
-// Team roster. Human Group CTO sits at the top; AI agents map to the office.
+const NAV = [
+  ["Tasks", Target, "tasks"],
+  ["Content", Satellite, "content"],
+  ["Calendar", Calendar, "calendar"],
+  ["Projects", Rocket, "projects"],
+  ["Memory", Brain, "memory"],
+  ["Docs", FileText, "docs"],
+  ["Team", Users, "team"],
+  ["Visual", Gamepad2, "visual"],
+];
+
+const PLACEHOLDER = {
+  content:  { icon: Satellite, title: "Content",  desc: "Plan and track the content your agents produce." },
+  calendar: { icon: Calendar,  title: "Calendar", desc: "Scheduled runs and upcoming agent tasks." },
+  projects: { icon: Rocket,    title: "Projects", desc: "Group missions into projects and follow their progress." },
+  memory:   { icon: Brain,     title: "Memory",   desc: "What the agents remember across runs." },
+  docs:     { icon: FileText,  title: "Docs",     desc: "Generated documents and deliverables from the team." },
+};
+
 const TEAM = [
   { section: "GROUP CTO", members: [
     { id: "human", name: "Jeremiah Ng", role: "Group CTO · Human", human: true, color: "#e8edff",
@@ -39,15 +60,15 @@ const TEAM = [
       desc: "The central brain. Routes every task to the right department, watches the work, verifies completion, and assigns the next." },
   ]},
   { section: "DEPARTMENTS", members: [
-    { id: "scout",  name: "SCOUT",  role: "Researcher · Observatory",         color: "#38bdf8", cadence: "On demand",
+    { id: "scout",  name: "SCOUT",  role: "Researcher · Observatory",      color: "#38bdf8", cadence: "On demand",
       desc: "Investigates questions and scans for signal, then reports concise, well-organized findings." },
-    { id: "warden", name: "WARDEN", role: "Sentinel · Security",              color: "#fb5570", cadence: "On demand",
+    { id: "warden", name: "WARDEN", role: "Sentinel · Security",           color: "#fb5570", cadence: "On demand",
       desc: "Assesses risks, reviews for vulnerabilities and compliance gaps, and reports prioritized security findings." },
-    { id: "scribe", name: "SCRIBE", role: "Writer · Research Lab",            color: "#f472b6", cadence: "On demand",
+    { id: "scribe", name: "SCRIBE", role: "Writer · Research Lab",         color: "#f472b6", cadence: "On demand",
       desc: "Produces clear written deliverables — summaries, briefs, and reports." },
-    { id: "orbit",  name: "ORBIT",  role: "Engineer · Development Center",    color: "#eab308", cadence: "On demand",
+    { id: "orbit",  name: "ORBIT",  role: "Engineer · Development Center", color: "#eab308", cadence: "On demand",
       desc: "Designs pragmatic technical solutions and writes clean, correct code." },
-    { id: "vault",  name: "VAULT",  role: "Data · Admin",                     color: "#fb923c", cadence: "On demand",
+    { id: "vault",  name: "VAULT",  role: "Data · Admin",                  color: "#fb923c", cadence: "On demand",
       desc: "Organizes, indexes, reconciles, and summarizes records and structured data." },
   ]},
 ];
@@ -65,9 +86,9 @@ const META = {
 const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570" };
 const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED" };
 
-/* --- pixel octopus sprite --- */
+/* --- pixel octopus sprite (memoized) --- */
 const OCTO = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XX.XXX.XXX.XX", "X..X.X.X.X..X"];
-function Octo({ color, size = 60, status = "idle", cto = false }) {
+const Octo = memo(function Octo({ color, size = 60, status = "idle", cto = false }) {
   const work = status === "working" || status === "command", think = status === "thinking", idle = status === "idle";
   const dim = idle ? 0.6 : 1, look = think ? -1.1 : 0;
   return (
@@ -82,10 +103,10 @@ function Octo({ color, size = 60, status = "idle", cto = false }) {
         : (<g><rect x="3" y="3" width="3" height="4" fill="#fff" /><rect x="7" y="3" width="3" height="4" fill="#fff" /><rect x={4} y={5 + look} width="1.4" height="1.8" fill="#0b1020" /><rect x={8} y={5 + look} width="1.4" height="1.8" fill="#0b1020" /></g>)}
     </svg>
   );
-}
+});
 
-/* --- furnished room interiors (viewBox 0 0 260 150) --- */
-function RoomArt({ room, color, work }) {
+/* --- furnished room interiors (memoized; only re-renders on color/work change) --- */
+const RoomArt = memo(function RoomArt({ room, color, work }) {
   const c = color, on = work ? 1 : 0.5;
   const base = (
     <>
@@ -155,16 +176,36 @@ function RoomArt({ room, color, work }) {
     default: break;
   }
   return (<>{base}{furn}</>);
-}
+});
+
+/* --- one room (memoized on primitive props -> no flicker on unrelated updates) --- */
+const Room = memo(function Room({ room, name, color, cto, status, task, department, cls, h, walk, sayHere, ctoAway, onPick }) {
+  const busy = status === "working" || status === "command";
+  return (
+    <div data-room={room} className={`room ${cls}`} style={{ "--rc": color }} onClick={() => !cto && onPick(department)}>
+      <div className="room-top"><span className="room-name">{room}</span><span className="room-dots"><i /><i /><i /></span></div>
+      <div className="scene" style={{ height: h }}>
+        <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={color} work={busy} /></svg>
+        {sayHere && !cto && <div className="speech" style={{ borderColor: color, color }}>on it!</div>}
+        {status === "thinking" && <div className="cue" style={{ color }}>?</div>}
+        {status === "idle" && <div className="cue zzz">z z z</div>}
+        <div className={`walker ${busy ? "busy " + walk : ""}`}>
+          <div className="oshadow" style={ctoAway ? { opacity: 0 } : undefined} />
+          {ctoAway ? <div className="cto-away">CTO en route…</div> : <Octo color={color} size={cto ? 76 : 56} status={status} cto={cto} />}
+        </div>
+        <div className="agent-tag" style={{ color }}>{name}</div>
+      </div>
+    </div>
+  );
+});
 
 /* --- Team roster view --- */
 function TeamView({ live, model }) {
   const liveBadge = (id) => {
     const a = live[id];
-    if (!a) return null;
-    const s = a.status;
+    if (!a) return ["IDLE", "#64786d"];
     const map = { command: ["ON-DUTY", "#a855f7"], working: ["ACTIVE", "#4ade80"], thinking: ["THINKING", "#eab308"], idle: ["IDLE", "#64786d"] };
-    return map[s] || map.idle;
+    return map[a.status] || map.idle;
   };
   return (
     <div style={SS.teamWrap}>
@@ -212,52 +253,69 @@ function TeamView({ live, model }) {
   );
 }
 
+function Placeholder({ icon: Icon, title, desc }) {
+  return (
+    <div style={SS.placeholder}>
+      <div style={SS.placeholderIcon}><Icon size={40} color="#3a4a66" /></div>
+      <div style={SS.placeholderTitle}>{title}</div>
+      <div style={SS.placeholderSoon}>COMING SOON</div>
+      <div style={SS.placeholderDesc}>{desc}</div>
+    </div>
+  );
+}
+
 export default function AgentOffice() {
   const { agents: live, tasks, events, settings, gemini, model, connected, assignTask, deleteTask, control, logout } = useAgentSocket();
-  const [view, setView] = useState("office");
+  const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
   const [say, setSay] = useState(null);
   const [courier, setCourier] = useState(null);
 
   const roomsRef = useRef(null);
-  const roomRefs = useRef({});
   const queueRef = useRef([]);
   const runningRef = useRef(false);
   const lastEvtRef = useRef(0);
+  const timersRef = useRef([]);
 
   const agents = AGENTS.map((s) => ({
     ...s,
     ...(live[s.id] || { status: s.cto ? "command" : "idle", task: s.cto ? "running the office" : "standing by", last: "" }),
   }));
   const byId = Object.fromEntries(agents.map((a) => [a.id, a]));
-  const byRoom = (room) => agents.find((a) => a.room === room);
 
   const taskList = Object.values(tasks).sort((a, b) => b.createdAt - a.createdAt);
   const activeTasks = taskList.filter((t) => ["queued", "in_progress", "review"].includes(t.status));
   const selectedTask = selected ? tasks[selected] : null;
 
-  // Courier: Jeremiah walks from Command HQ to the assigned agent's room and back.
+  const onPick = useCallback((department) => setForm((f) => ({ ...f, department })), []);
+
+  // Courier: Jeremiah walks Command HQ -> agent room -> back. One trip at a
+  // time; trips chain without dropping the sprite, so HQ never flickers.
   const centerOf = (room) => {
-    const cont = roomsRef.current, el = roomRefs.current[room];
-    if (!cont || !el) return null;
+    const cont = roomsRef.current;
+    if (!cont) return null;
+    const el = cont.querySelector(`[data-room="${room}"]`);
+    if (!el) return null;
     const cr = cont.getBoundingClientRect(), r = el.getBoundingClientRect();
     return { x: r.left - cr.left + r.width / 2, y: r.top - cr.top + r.height / 2 };
   };
-  const runQueue = () => {
-    if (runningRef.current) return;
+  const step = () => {
     const item = queueRef.current.shift();
-    if (!item) return;
+    if (!item) { setCourier(null); runningRef.current = false; return; }
     const hq = centerOf("COMMAND HQ"), tgt = centerOf(item.room);
-    if (!hq || !tgt) { runningRef.current = false; return; }
-    runningRef.current = true;
+    if (!hq || !tgt) { setCourier(null); runningRef.current = false; return; }
+    const T = timersRef.current;
     setCourier({ ...item, coords: hq, showSpeech: false });
     setSay({ room: item.room });
-    setTimeout(() => setCourier((c) => c && { ...c, coords: tgt }), 60);
-    setTimeout(() => setCourier((c) => c && { ...c, showSpeech: true }), 1250);
-    setTimeout(() => { setCourier((c) => c && { ...c, showSpeech: false, coords: hq }); setSay(null); }, 2750);
-    setTimeout(() => { setCourier(null); runningRef.current = false; runQueue(); }, 3950);
+    T.push(setTimeout(() => setCourier((c) => c && { ...c, coords: tgt }), 90));
+    T.push(setTimeout(() => setCourier((c) => c && { ...c, showSpeech: true }), 1350));
+    T.push(setTimeout(() => { setCourier((c) => c && { ...c, showSpeech: false, coords: hq }); setSay((s) => (s && s.room === item.room ? null : s)); }, 2800));
+    T.push(setTimeout(step, 3950));
   };
+  const runQueue = () => { if (runningRef.current) return; runningRef.current = true; step(); };
+
+  useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
   useEffect(() => {
     if (!events.length) return;
@@ -271,8 +329,11 @@ export default function AgentOffice() {
       const task = e.text.includes(": ") ? e.text.split(": ").slice(1).join(": ") : "";
       queueRef.current.push({ room: ag.room, name: ag.name, task });
     }
-    if (view === "office") runQueue();
+    if (queueRef.current.length > 4) queueRef.current = queueRef.current.slice(-4); // stay current
+    if (view === "visual") runQueue();
   }, [events]);
+
+  useEffect(() => { if (view === "visual") runQueue(); }, [view]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -283,7 +344,19 @@ export default function AgentOffice() {
   };
 
   const badge = (s) => s === "command" ? ["ON-DUTY", "#a855f7"] : s === "working" ? ["ACTIVE", "#4ade80"] : s === "thinking" ? ["THINKING", "#eab308"] : ["IDLE", "#64786d"];
-  const ticker = events.length ? events.map((e) => e.text) : ["Mission Control — connecting…"];
+  const ticker = events.length ? events.slice(0, 16).map((e) => e.text) : ["Mission Control — connecting…"];
+  const ctoAway = !!courier;
+
+  const composer = (
+    <form style={SS.compose} onSubmit={submit}>
+      <select style={SS.select} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
+        {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+      <input style={SS.input} placeholder="Task title…" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+      <textarea style={SS.textarea} rows={3} placeholder="Details / instructions (optional)" value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} />
+      <button type="submit" style={SS.assignBtn}><Plus size={13} /> ASSIGN TASK</button>
+    </form>
+  );
 
   return (
     <div style={SS.root}>
@@ -302,40 +375,22 @@ export default function AgentOffice() {
           </div>
         </div>
 
-        <div style={SS.navToggle}>
-          <button style={{ ...SS.navBtn, ...(view === "office" ? SS.navBtnActive : {}) }} onClick={() => setView("office")}><Gamepad2 size={13} /> Office</button>
-          <button style={{ ...SS.navBtn, ...(view === "team" ? SS.navBtnActive : {}) }} onClick={() => setView("team")}><Users size={13} /> Team</button>
-        </div>
-
-        <form style={SS.compose} onSubmit={submit}>
-          <div style={SS.secTitle}>ASSIGN A TASK</div>
-          <select style={SS.select} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
-            {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <input style={SS.input} placeholder="Task title…" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
-          <textarea style={SS.textarea} rows={3} placeholder="Details / instructions (optional)" value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} />
-          <button type="submit" style={SS.assignBtn}><Plus size={13} /> ADD TO QUEUE</button>
-        </form>
-
-        <div style={SS.queueWrap}>
-          <div style={SS.secTitle}>QUEUE · {activeTasks.length} active</div>
-          {taskList.length === 0 && <div style={SS.queueEmpty}>No tasks yet. Add one above, or let Jeremiah run the office.</div>}
-          {taskList.slice(0, 30).map((t) => {
-            const col = STATUS_COLOR[t.status] || "#64786d";
+        <nav style={SS.nav}>
+          {NAV.map(([label, Icon, key]) => {
+            const active = view === key;
             return (
-              <div key={t.id} style={SS.queueItem} onClick={() => setSelected(t.id)}>
-                <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
-                <span style={SS.queueTitle}>{t.title}</span>
+              <div key={key} style={{ ...SS.navItem, ...(active ? SS.navActive : {}) }} onClick={() => setView(key)}>
+                <Icon size={16} /> <span>{label}</span>{active && <span style={SS.navDot} />}
               </div>
             );
           })}
-        </div>
+        </nav>
+
+        <button onClick={logout} style={SS.sideLogout}><LogOut size={14} /> Logout</button>
       </aside>
 
       <main style={SS.main}>
-        {view === "team" ? (
-          <TeamView live={live} model={model} />
-        ) : (
+        {view === "visual" && (
           <>
             <div style={SS.head}>
               <h1 style={SS.h1}><Gamepad2 size={20} /> Agent Office {settings.paused && <span style={SS.pausedChip}>PAUSED</span>}</h1>
@@ -344,33 +399,18 @@ export default function AgentOffice() {
                 <button onClick={() => control("all_hands")} className="mc-btn" style={{ ...SS.btn, ...SS.go }}><Zap size={12} /> ALL HANDS</button>
                 <button onClick={() => control("clock_out")} className="mc-btn" style={{ ...SS.btn, ...SS.stop }}><Power size={12} /> CLOCK OUT</button>
                 <button onClick={() => control("toggle_autonomous", { autonomous: !settings.autonomous })} className="mc-btn" style={{ ...SS.btn, ...(settings.autonomous ? SS.autoOn : SS.autoOff) }}><Bot size={12} /> AUTO {settings.autonomous ? "ON" : "OFF"}</button>
-                <button onClick={logout} className="mc-btn" style={{ ...SS.btn, ...SS.ghost }}><LogOut size={12} /> LOGOUT</button>
               </div>
             </div>
 
             <div className="rooms" ref={roomsRef} style={{ position: "relative" }}>
               {ROOMS.map((room) => {
-                const a = byRoom(room), m = META[room];
-                const busy = a.status === "working" || a.status === "command";
-                const ctoAway = a.cto && !!courier;
+                const a = agents.find((x) => x.room === room), m = META[room];
                 return (
-                  <div key={room} ref={(el) => (roomRefs.current[room] = el)} className={`room ${m.cls}`} style={{ "--rc": a.color }} onClick={() => !a.cto && setForm((f) => ({ ...f, department: a.department }))}>
-                    <div className="room-top"><span className="room-name">{room}</span><span className="room-dots"><i /><i /><i /></span></div>
-                    <div className="scene" style={{ height: m.h }}>
-                      <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={a.color} work={busy} /></svg>
-                      {say && say.room === room && !a.cto && <div className="speech" style={{ borderColor: a.color, color: a.color }}>on it!</div>}
-                      {a.status === "thinking" && <div className="cue" style={{ color: a.color }}>?</div>}
-                      {a.status === "idle" && <div className="cue zzz">z z z</div>}
-                      <div className={`walker ${busy ? "busy " + m.walk : ""}`}>
-                        <div className="oshadow" style={ctoAway ? { opacity: 0 } : undefined} />
-                        {ctoAway ? <div className="cto-away">CTO en route…</div> : <Octo color={a.color} size={a.cto ? 76 : 56} status={a.status} cto={a.cto} />}
-                      </div>
-                      <div className="agent-tag" style={{ color: a.color }}>{a.name}</div>
-                    </div>
-                  </div>
+                  <Room key={room} room={room} name={a.name} color={a.color} cto={!!a.cto} status={a.status} task={a.task}
+                    department={a.department} cls={m.cls} h={m.h} walk={m.walk}
+                    sayHere={say?.room === room} ctoAway={a.cto && ctoAway} onPick={onPick} />
                 );
               })}
-
               {courier && (
                 <div className="courier" style={{ left: courier.coords.x - 30, top: courier.coords.y - 50 }}>
                   {courier.showSpeech && <div className="courier-say">→ {courier.name}: {courier.task}</div>}
@@ -405,6 +445,37 @@ export default function AgentOffice() {
             </div>
           </>
         )}
+
+        {view === "tasks" && (
+          <div style={SS.tasksWrap}>
+            <h1 style={SS.h1}><Target size={20} /> Tasks</h1>
+            <div style={SS.tasksGrid}>
+              <div style={SS.tasksCompose}>
+                <div style={SS.secTitle}>ASSIGN A TASK</div>
+                {composer}
+                <div style={SS.composeHint}>Pick a department (or “Any”) and Jeremiah routes it to the right agent.</div>
+              </div>
+              <div style={SS.tasksList}>
+                <div style={SS.secTitle}>QUEUE · {activeTasks.length} active · {taskList.length} total</div>
+                {taskList.length === 0 && <div style={SS.queueEmpty}>No tasks yet. Add one, or let Jeremiah run the office in Visual.</div>}
+                {taskList.map((t) => {
+                  const col = STATUS_COLOR[t.status] || "#64786d";
+                  return (
+                    <div key={t.id} style={SS.taskRow} onClick={() => setSelected(t.id)}>
+                      <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
+                      <span style={SS.taskRowTitle}>{t.title}</span>
+                      {t.assignedTo && byId[t.assignedTo] && <span style={SS.taskRowWho}>{byId[t.assignedTo].name}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === "team" && <TeamView live={live} model={model} />}
+
+        {PLACEHOLDER[view] && <Placeholder icon={PLACEHOLDER[view].icon} title={PLACEHOLDER[view].title} desc={PLACEHOLDER[view].desc} />}
       </main>
 
       {selectedTask && (
@@ -436,26 +507,17 @@ const PIX = "'Press Start 2P', monospace";
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const SS = {
   root: { display: "flex", fontFamily: MONO, color: "#cfe3d8", background: "#0a0e1a", borderRadius: 14, overflow: "hidden", border: "1px solid #1a2440", minHeight: "calc(100vh - 32px)" },
-  side: { width: 248, flexShrink: 0, background: "linear-gradient(180deg,#0c1226,#0a0e1a)", borderRight: "1px solid #1a2440", padding: "18px 14px", display: "flex", flexDirection: "column", gap: 14, maxHeight: "calc(100vh - 32px)" },
+  side: { width: 200, flexShrink: 0, background: "linear-gradient(180deg,#0c1226,#0a0e1a)", borderRight: "1px solid #1a2440", padding: "18px 14px", display: "flex", flexDirection: "column", gap: 16 },
   brandWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7, textAlign: "center", paddingBottom: 14, borderBottom: "1px solid #1a2440" },
   brand: { fontFamily: PIX, fontSize: 12, lineHeight: 1.6, color: "#e8edff", letterSpacing: 1 },
   online: { fontSize: 9.5, display: "flex", alignItems: "center", gap: 5, letterSpacing: 1 },
   onDot: { width: 7, height: 7, borderRadius: 99, boxShadow: "0 0 6px currentColor" },
   modePill: { fontSize: 8.5, letterSpacing: 1, color: "#9db0c8", display: "flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 99, border: "1px solid #243358", background: "#0a1020" },
-  navToggle: { display: "flex", gap: 6, background: "#0a1020", padding: 4, borderRadius: 9, border: "1px solid #1a2440" },
-  navBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 7, border: "none", background: "transparent", color: "#8aa0c0", fontFamily: MONO, fontSize: 11, fontWeight: 700, cursor: "pointer" },
-  navBtnActive: { background: "#15203f", color: "#e8edff", border: "1px solid #243358" },
-  compose: { display: "flex", flexDirection: "column", gap: 7 },
-  secTitle: { fontSize: 9, letterSpacing: 1.5, color: "#5e7088", fontWeight: 700, margin: "2px 0" },
-  select: { padding: "8px 9px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11 },
-  input: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 12 },
-  textarea: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11, resize: "vertical" },
-  assignBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px", borderRadius: 7, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
-  queueWrap: { display: "flex", flexDirection: "column", gap: 5, overflowY: "auto", flex: 1, minHeight: 60 },
-  queueEmpty: { fontSize: 10, color: "#5e7088", lineHeight: 1.5, padding: "4px 2px" },
-  queueItem: { display: "flex", alignItems: "center", gap: 7, padding: "7px 8px", borderRadius: 7, background: "#0a1020", border: "1px solid #161f3a", cursor: "pointer" },
-  queueTitle: { fontSize: 10.5, color: "#cfe3d8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  pill: { fontSize: 7.5, fontWeight: 700, padding: "2px 6px", borderRadius: 99, border: "1px solid", letterSpacing: 0.8, flexShrink: 0 },
+  nav: { display: "flex", flexDirection: "column", gap: 3 },
+  navItem: { display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 9, fontSize: 13, color: "#8aa0c0", cursor: "pointer", position: "relative" },
+  navActive: { background: "#15203f", color: "#e8edff", border: "1px solid #243358" },
+  navDot: { position: "absolute", right: 12, width: 7, height: 7, borderRadius: 99, background: "#4ade80", boxShadow: "0 0 6px #4ade80" },
+  sideLogout: { marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "9px", borderRadius: 8, border: "1px solid #243358", background: "transparent", color: "#9db0c8", fontFamily: MONO, fontSize: 12, fontWeight: 700, cursor: "pointer" },
   main: { flex: 1, minWidth: 0, padding: 18, background: "radial-gradient(120% 90% at 50% -10%, #0e1430, #0a0e1a 60%)", overflowY: "auto", maxHeight: "calc(100vh - 32px)" },
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
@@ -467,7 +529,6 @@ const SS = {
   stop: { color: "#fca5b5", background: "rgba(251,85,112,.1)", borderColor: "rgba(251,85,112,.4)" },
   autoOn: { color: "#c4b5fd", background: "rgba(168,85,247,.12)", borderColor: "rgba(168,85,247,.5)" },
   autoOff: { color: "#7a8aa0", background: "rgba(120,140,170,.06)", borderColor: "#243358" },
-  ghost: { color: "#9db0c8", background: "transparent", borderColor: "#243358" },
   ticker: { display: "flex", alignItems: "center", gap: 12, marginTop: 14, padding: "9px 12px", borderRadius: 10, background: "#0c1226", border: "1px solid #1a2440", overflow: "hidden" },
   live: { display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, color: "#4ade80", letterSpacing: 1, flexShrink: 0 },
   liveDot: { width: 7, height: 7, borderRadius: 99, background: "#4ade80", boxShadow: "0 0 6px #4ade80" },
@@ -480,12 +541,35 @@ const SS = {
   cardBadge: { display: "inline-block", marginTop: 4, fontSize: 8, fontWeight: 700, padding: "2px 7px", borderRadius: 99, border: "1px solid", letterSpacing: 1 },
   cardBody: { fontSize: 11, color: "#9db0c8", marginTop: 9, minHeight: 28 },
   cardMeta: { display: "flex", justifyContent: "space-between", fontSize: 9.5, color: "#5e7088", marginTop: 9, borderTop: "1px solid #1a2440", paddingTop: 8 },
+  // tasks
+  tasksWrap: { display: "flex", flexDirection: "column", gap: 16 },
+  tasksGrid: { display: "grid", gridTemplateColumns: "minmax(240px,320px) 1fr", gap: 16, alignItems: "start" },
+  tasksCompose: { background: "#0c1226", border: "1px solid #1a2440", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 8 },
+  composeHint: { fontSize: 10, color: "#5e7088", lineHeight: 1.5 },
+  tasksList: { display: "flex", flexDirection: "column", gap: 6 },
+  taskRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440", cursor: "pointer" },
+  taskRowTitle: { fontSize: 12, color: "#e8edff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  taskRowWho: { fontSize: 9, color: "#8aa0c0", letterSpacing: 0.5 },
+  secTitle: { fontSize: 9, letterSpacing: 1.5, color: "#5e7088", fontWeight: 700, margin: "2px 0" },
+  compose: { display: "flex", flexDirection: "column", gap: 7 },
+  select: { padding: "8px 9px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11 },
+  input: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 12 },
+  textarea: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11, resize: "vertical" },
+  assignBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px", borderRadius: 7, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  queueEmpty: { fontSize: 11, color: "#5e7088", lineHeight: 1.5, padding: "6px 2px" },
+  pill: { fontSize: 7.5, fontWeight: 700, padding: "2px 6px", borderRadius: 99, border: "1px solid", letterSpacing: 0.8, flexShrink: 0 },
+  // placeholder
+  placeholder: { minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, textAlign: "center" },
+  placeholderIcon: { width: 80, height: 80, borderRadius: 18, display: "grid", placeItems: "center", background: "#0c1226", border: "1px solid #1a2440", marginBottom: 6 },
+  placeholderTitle: { fontSize: 20, fontWeight: 800, color: "#e8edff" },
+  placeholderSoon: { fontSize: 9, letterSpacing: 2, color: "#a855f7", fontWeight: 700 },
+  placeholderDesc: { fontSize: 12, color: "#7a8aa0", maxWidth: 340, lineHeight: 1.5 },
   // team
   teamWrap: { display: "flex", flexDirection: "column", gap: 22 },
   teamHeadRow: { display: "flex", flexDirection: "column", gap: 4, marginBottom: 2 },
   teamSub: { fontSize: 11.5, color: "#7a8aa0" },
   teamSection: { display: "flex", flexDirection: "column", gap: 10 },
-  teamSectionTitle: { fontSize: 9, letterSpacing: 2.5, color: "#5e7088", fontWeight: 700, textAlign: "center", position: "relative" },
+  teamSectionTitle: { fontSize: 9, letterSpacing: 2.5, color: "#5e7088", fontWeight: 700, textAlign: "center" },
   teamGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(290px,1fr))", gap: 12 },
   memberCard: { background: "#0c1226", border: "1px solid", borderRadius: 12, padding: 14 },
   memberHead: { display: "flex", alignItems: "center", gap: 11 },
@@ -533,7 +617,7 @@ const CSS = `
 .cto-away { font-family:'JetBrains Mono'; font-size:8px; color:#a855f7; opacity:.8; border:1px dashed #a855f766; border-radius:6px; padding:3px 7px; white-space:nowrap; }
 @keyframes busyA { 0%,12%{left:26%;} 26%,38%{left:50%;} 52%,64%{left:74%;} 80%,92%{left:50%;} 100%{left:26%;} }
 @keyframes busyB { 0%,12%{left:74%;} 26%,38%{left:50%;} 52%,64%{left:26%;} 80%,92%{left:50%;} 100%{left:74%;} }
-.courier { position:absolute; z-index:7; display:flex; flex-direction:column; align-items:center; pointer-events:none; transition:left 1.15s cubic-bezier(.45,.05,.3,1), top 1.15s cubic-bezier(.45,.05,.3,1); }
+.courier { position:absolute; z-index:7; display:flex; flex-direction:column; align-items:center; pointer-events:none; transition:left 1.2s cubic-bezier(.45,.05,.3,1), top 1.2s cubic-bezier(.45,.05,.3,1); }
 .courier-shadow { background:#a855f7; }
 .courier-say { position:absolute; bottom:100%; margin-bottom:4px; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; color:#d8b4fe; background:#070a14; border:1px solid #a855f7; border-radius:6px; padding:3px 8px; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 0 10px #a855f755; }
 .agent-tag { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-family:'Press Start 2P',monospace; font-size:7px; letter-spacing:1px; opacity:.85; z-index:2; }
@@ -547,6 +631,6 @@ const CSS = `
 .octo-tilt { animation:octoTilt 1.8s ease-in-out infinite; }
 .tw { animation:twk 1.6s ease-in-out infinite; } @keyframes twk { 0%,100%{opacity:.3;} 50%{opacity:1;} }
 .spin { animation:spin 1.3s linear infinite; } @keyframes spin { to{transform:rotate(360deg);} }
-.mc-marquee { animation:marq 22s linear infinite; } @keyframes marq { from{transform:translateX(0);} to{transform:translateX(-50%);} }
+.mc-marquee { animation:marq 26s linear infinite; will-change:transform; } @keyframes marq { from{transform:translateX(0);} to{transform:translateX(-50%);} }
 .mc-btn:hover { filter:brightness(1.15); } .mc-btn:active { transform:scale(.97); }
 `;
