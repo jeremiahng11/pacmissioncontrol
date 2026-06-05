@@ -15,7 +15,8 @@
       "Bash(git mv *)",
       "Bash(kill %1)",
       "Bash(pkill -f \"node server/index.js\")",
-      "Bash(rm -f /tmp/mc.cookie /tmp/wsclient.mjs /tmp/mc.log)"
+      "Bash(rm -f /tmp/mc.cookie /tmp/wsclient.mjs /tmp/mc.log)",
+      "WebFetch(domain:ai.google.dev)"
     ]
   }
 }
