@@ -54,9 +54,12 @@ async function runTask(agent, task) {
 
     setAgent(agent.id, { status: "working", task: task.title });
     const memoryText = isUser ? getMemoryText(agent.department) : "";
+    // Any output from a prior attempt becomes context so the agent CONTINUES
+    // the work instead of starting cold (re-queues and manual "Continue").
+    const priorWork = isUser ? (task.result || null) : null;
     let result;
     try {
-      result = await runWork(agent, task, memoryText, model);
+      result = await runWork(agent, task, memoryText, model, priorWork);
     } catch (err) { handleError(agent, task, err); return; }
     updateTask(task.id, { status: "review", result });
 

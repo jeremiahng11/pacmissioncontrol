@@ -13,7 +13,7 @@ import { WebSocketServer } from "ws";
 import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
-  initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask,
+  initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, updateTask,
   getDocument, deleteDocument, deleteMemory, resolveIssue,
 } from "./store.js";
 import {
@@ -131,6 +131,15 @@ app.post("/api/tasks/clear", (req, reply) => {
   const scope = (req.body && req.body.scope) || "done";
   if (!["auto", "done", "all"].includes(scope)) return reply.code(400).send({ error: "bad scope" });
   reply.send({ removed: clearTasks(scope) });
+});
+
+app.post("/api/tasks/:id/retry", (req, reply) => {
+  const t = getTask(req.params.id);
+  if (!t) return reply.code(404).send({ error: "not found" });
+  if (!["failed", "blocked"].includes(t.status)) return reply.code(400).send({ error: "only failed or blocked tasks can be continued" });
+  // Keep the partial result so the agent continues from it.
+  updateTask(t.id, { status: "queued", attempts: 0, startedAt: null, completedAt: null, reviewNotes: "continuing from previous attempt" });
+  reply.send({ ok: true });
 });
 
 app.delete("/api/tasks/:id", (req, reply) => {

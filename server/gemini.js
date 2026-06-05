@@ -58,7 +58,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 /* Worker performs the task, building on the department's memory.
    model=null (or no key) => simulated path: no API call, no cost. */
-export async function runWork(agent, task, memoryText = "", model = null) {
+export async function runWork(agent, task, memoryText = "", model = null, priorWork = null) {
   if (!ai || !model) {
     await wait(1200 + Math.random() * 1800);
     return !model
@@ -70,9 +70,12 @@ export async function runWork(agent, task, memoryText = "", model = null) {
   const memBlock = memoryText
     ? `\n\nNOTES FROM EARLIER WORK (build on these, continue and add to them, don't repeat):\n${memoryText}`
     : "";
+  const priorBlock = priorWork
+    ? `\n\nPREVIOUS ATTEMPT (this was incomplete — CONTINUE from it: keep what's good, fix the gaps, and deliver the COMPLETE result):\n${priorWork}`
+    : "";
   const out = await generate(
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. Follow any format the task requests. No preamble like "Here is" — start directly with the title heading.`,
-    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}`,
+    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}`,
     { model }
   );
   return out || `Done: ${task.title}.`;

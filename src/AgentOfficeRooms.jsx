@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
@@ -347,7 +347,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -631,10 +631,17 @@ export default function AgentOffice() {
               {selectedTask.attempts ? ` · attempt ${selectedTask.attempts + 1}` : ""}
             </div>
             {selectedTask.prompt && selectedTask.prompt !== selectedTask.title && <div style={SS.modalPrompt}>{selectedTask.prompt}</div>}
-            <div style={SS.secTitle}>DELIVERABLE</div>
+            {["failed", "blocked"].includes(selectedTask.status) && selectedTask.reviewNotes && (
+              <div style={SS.failReason}>
+                <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span><b>Why it {selectedTask.status === "blocked" ? "is blocked" : "failed"}:</b> {selectedTask.reviewNotes}</span>
+              </div>
+            )}
+            <div style={SS.secTitle}>{["failed", "blocked"].includes(selectedTask.status) ? "PARTIAL WORK SO FAR" : "DELIVERABLE"}</div>
             <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
-            {selectedTask.reviewNotes && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
+            {selectedTask.reviewNotes && !["failed", "blocked"].includes(selectedTask.status) && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
             <div style={SS.modalActions}>
+              {["failed", "blocked"].includes(selectedTask.status) && <button style={SS.continueBtn} onClick={() => retryTask(selectedTask.id)}><RotateCw size={13} /> CONTINUE TASK</button>}
               {(() => { const td = documents.find((d) => d.taskId === selectedTask.id); return td ? <button style={SS.downloadBtn} onClick={() => downloadDoc(td.id)}><Download size={13} /> DOWNLOAD .DOC</button> : null; })()}
               <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
             </div>
@@ -790,6 +797,8 @@ const SS = {
   modalPrompt: { fontSize: 12, color: "#9db0c8", background: "#070a14", border: "1px solid #161f3a", borderRadius: 8, padding: 10, marginBottom: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 },
   resultBox: { fontSize: 12.5, color: "#cfe3d8", background: "#070a14", border: "1px solid #1a2440", borderRadius: 8, padding: 12, whiteSpace: "pre-wrap", lineHeight: 1.55, marginTop: 4 },
   reviewNote: { fontSize: 11, color: "#bbf7d0", marginTop: 10 },
+  failReason: { display: "flex", gap: 8, fontSize: 11.5, color: "#fcd9b6", background: "rgba(251,146,60,.1)", border: "1px solid rgba(251,146,60,.35)", borderRadius: 8, padding: "9px 11px", margin: "10px 0 4px", lineHeight: 1.45 },
+  continueBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(74,222,128,.45)", background: "rgba(74,222,128,.12)", color: "#bbf7d0", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   modalActions: { display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" },
   downloadBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   delBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 11px", borderRadius: 8, border: "1px solid rgba(251,85,112,.4)", background: "rgba(251,85,112,.1)", color: "#fca5b5", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },

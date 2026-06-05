@@ -87,6 +87,7 @@ export function useAgentSocket() {
 
   const assignTask = useCallback((t) => api.createTask(t).catch((e) => console.error(e)), []);
   const deleteTask = useCallback((id) => api.deleteTask(id).catch(() => {}), []);
+  const retryTask = useCallback((id) => api.retryTask(id).catch(() => {}), []);
   const clearTasks = useCallback((scope) => api.clearTasks(scope).catch(() => {}), []);
   const control = useCallback((a, extra) => api.control(a, extra).catch(() => {}), []);
   const logout = useCallback(async () => {
@@ -98,5 +99,5 @@ export function useAgentSocket() {
   const deleteMemory = useCallback((scope) => api.deleteMemory(scope).catch(() => {}), []);
   const resolveIssue = useCallback((id) => api.resolveIssue(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue };
+  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue };
 }

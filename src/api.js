@@ -25,6 +25,7 @@ export const api = {
   deleteMemory: (scope) => req(`/api/memory/${scope}`, { method: "DELETE" }),
   createTask: (t) => req("/api/tasks", { method: "POST", body: JSON.stringify(t) }),
   deleteTask: (id) => req(`/api/tasks/${id}`, { method: "DELETE" }),
+  retryTask: (id) => req(`/api/tasks/${id}/retry`, { method: "POST" }),
   clearTasks: (scope) => req("/api/tasks/clear", { method: "POST", body: JSON.stringify({ scope }) }),
   resolveIssue: (id) => req(`/api/issues/${id}/resolve`, { method: "POST" }),
   control: (action, extra = {}) =>
