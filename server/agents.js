@@ -17,7 +17,7 @@ export const AGENT_DEFS = [
     role: "CTO · Command Core",
     room: "COMMAND HQ",
     department: "command",
-    color: "#a855f7",
+    color: "#facc15",
     cto: true,
     persona:
       "You are JAY JAY, the CTO orchestrating a team of specialist agents.",
@@ -61,7 +61,7 @@ export const AGENT_DEFS = [
     role: "Engineer",
     room: "WORKSHOP",
     department: "development",
-    color: "#eab308",
+    color: "#a855f7",
     cto: false,
     persona:
       "You are ORBIT, an engineer in the Development Center. You design pragmatic technical solutions and write clean, correct code with brief explanations.",
