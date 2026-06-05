@@ -670,7 +670,7 @@ export default function AgentOffice() {
 const PIX = "'Press Start 2P', monospace";
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const SS = {
-  root: { display: "flex", fontFamily: MONO, color: "#cfe3d8", background: "#0a0e1a", borderRadius: 14, overflow: "hidden", border: "1px solid #1a2440", minHeight: "calc(100vh - 32px)" },
+  root: { display: "flex", fontFamily: MONO, color: "#cfe3d8", background: "#0a0e1a", borderRadius: 14, overflow: "hidden", border: "1px solid #1a2440", minHeight: "calc(100vh - 32px)", maxWidth: 1440, margin: "0 auto" },
   side: { width: 200, flexShrink: 0, background: "linear-gradient(180deg,#0c1226,#0a0e1a)", borderRight: "1px solid #1a2440", padding: "18px 14px", display: "flex", flexDirection: "column", gap: 16 },
   brandWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7, textAlign: "center", paddingBottom: 14, borderBottom: "1px solid #1a2440" },
   brand: { fontFamily: PIX, fontSize: 12, lineHeight: 1.6, color: "#e8edff", letterSpacing: 1 },
@@ -696,7 +696,7 @@ const SS = {
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
   autoBanner: { display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.08)", border: "1px solid rgba(234,179,8,.35)", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
-  idleBanner: { display: "flex", alignItems: "center", gap: 10, fontSize: 11, color: "#8aa0c0", background: "#0c1226", border: "1px solid #1a2440", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
+  idleBanner: { position: "fixed", bottom: 18, right: 18, zIndex: 40, maxWidth: 360, display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#cfe3d8", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 13px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.5)" },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },
   btn: { display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: .5, padding: "8px 11px", borderRadius: 8, cursor: "pointer", fontFamily: MONO, border: "1px solid" },
   gold: { color: "#1a1405", background: "#f5c95b", borderColor: "#f5c95b" },
