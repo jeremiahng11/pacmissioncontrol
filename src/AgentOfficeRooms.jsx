@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
@@ -361,6 +361,7 @@ export default function AgentOffice() {
   const [courier, setCourier] = useState(null);
   const [taskFilter, setTaskFilter] = useState("all");
   const [idleDismissed, setIdleDismissed] = useState(false);
+  const [files, setFiles] = useState([]);
 
   const downloadDoc = (id) => {
     const a = document.createElement("a");
@@ -439,9 +440,12 @@ export default function AgentOffice() {
     e.preventDefault();
     const title = form.title.trim();
     if (!title) return;
-    assignTask({ title, prompt: form.details.trim() || title, department: form.department || null });
+    assignTask({ title, prompt: form.details.trim() || title, department: form.department || null }, files);
     setForm((f) => ({ ...f, title: "", details: "" }));
+    setFiles([]);
   };
+  const addFiles = (list) => setFiles((prev) => [...prev, ...Array.from(list)].slice(0, 6));
+  const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
 
   const badge = (s) => s === "command" ? ["ON-DUTY", "#a855f7"] : s === "working" ? ["ACTIVE", "#4ade80"] : s === "thinking" ? ["THINKING", "#eab308"] : ["IDLE", "#64786d"];
   const ticker = events.length ? events.slice(0, 16).map((e) => e.text) : ["Mission Control — connecting…"];
@@ -454,6 +458,21 @@ export default function AgentOffice() {
       </select>
       <input style={SS.input} placeholder="Task title…" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
       <textarea style={SS.textarea} rows={3} placeholder="Details / instructions (optional)" value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} />
+      <label style={SS.attachBtn}>
+        <Paperclip size={12} /> Attach files (image / PDF / text)
+        <input type="file" multiple accept="image/*,application/pdf,.txt,.csv,.md,.json" style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+      </label>
+      {files.length > 0 && (
+        <div style={SS.fileChips}>
+          {files.map((f, i) => (
+            <span key={i} style={SS.fileChip} title={f.name}>
+              {/^image\//.test(f.type) ? <ImageIcon size={11} /> : <Paperclip size={11} />}
+              <span style={SS.fileChipName}>{f.name}</span>
+              <button type="button" style={SS.fileChipX} onClick={() => removeFile(i)}><X size={10} /></button>
+            </span>
+          ))}
+        </div>
+      )}
       <button type="submit" style={SS.assignBtn}><Plus size={13} /> ASSIGN TASK</button>
     </form>
   );
@@ -636,6 +655,16 @@ export default function AgentOffice() {
               {selectedTask.attempts ? ` · attempt ${selectedTask.attempts + 1}` : ""}
             </div>
             {selectedTask.prompt && selectedTask.prompt !== selectedTask.title && <div style={SS.modalPrompt}>{selectedTask.prompt}</div>}
+            {selectedTask.attachments && selectedTask.attachments.length > 0 && (
+              <>
+                <div style={SS.secTitle}>ATTACHMENTS ({selectedTask.attachments.length})</div>
+                <div style={SS.attachGrid}>
+                  {selectedTask.attachments.map((a) => /^image\//.test(a.mime)
+                    ? <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noopener"><img src={`/api/attachments/${a.id}`} alt={a.filename} style={SS.attachThumb} /></a>
+                    : <a key={a.id} href={`/api/attachments/${a.id}`} target="_blank" rel="noopener" style={SS.attachFile}><Paperclip size={12} /> {a.filename}</a>)}
+                </div>
+              </>
+            )}
             {["failed", "blocked"].includes(selectedTask.status) && selectedTask.reviewNotes && (
               <div style={SS.failReason}>
                 <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -753,6 +782,14 @@ const SS = {
   input: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 12 },
   textarea: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11, resize: "vertical" },
   assignBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px", borderRadius: 7, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  attachBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 7, border: "1px dashed #3a4a66", background: "transparent", color: "#9db0c8", fontSize: 10, cursor: "pointer", fontFamily: MONO },
+  fileChips: { display: "flex", flexDirection: "column", gap: 4 },
+  fileChip: { display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 6, background: "#0a1020", border: "1px solid #1a2440", fontSize: 10, color: "#cfe3d8" },
+  fileChipName: { flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  fileChipX: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 0, display: "flex" },
+  attachGrid: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, marginTop: 4 },
+  attachThumb: { width: 84, height: 84, objectFit: "cover", borderRadius: 8, border: "1px solid #243358", display: "block" },
+  attachFile: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#9db0c8", textDecoration: "none", padding: "8px 10px", borderRadius: 8, border: "1px solid #243358", background: "#070a14" },
   queueEmpty: { fontSize: 11, color: "#5e7088", lineHeight: 1.5, padding: "6px 2px" },
   pill: { fontSize: 7.5, fontWeight: 700, padding: "2px 6px", borderRadius: 99, border: "1px solid", letterSpacing: 0.8, flexShrink: 0 },
   // docs + memory

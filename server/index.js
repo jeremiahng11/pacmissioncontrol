@@ -15,7 +15,9 @@ import { VALID_DEPARTMENTS } from "./agents.js";
 import {
   initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, updateTask,
   getDocument, deleteDocument, deleteMemory, resolveIssue,
+  createAttachment, getAttachment, getAttachments, serializeAttachment,
 } from "./store.js";
+import multipart from "@fastify/multipart";
 import {
   startOrchestrator, dispatchNow, allHands, clockOut, getSettings, setSetting,
 } from "./orchestrator.js";
@@ -37,6 +39,7 @@ const app = Fastify({ logger: false, trustProxy: true });
 
 await app.register(cookie, { secret: SESSION_SECRET });
 await app.register(formbody);
+await app.register(multipart, { limits: { fileSize: 12 * 1024 * 1024, files: 6 } });
 if (existsSync(DIST)) {
   await app.register(fastifyStatic, { root: DIST, prefix: "/", index: false, wildcard: false });
 }
@@ -81,12 +84,42 @@ app.get("/api/state", (req, reply) => {
   reply.send({ ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL, demoModel: GEMINI_DEMO_MODEL });
 });
 
-app.post("/api/tasks", (req, reply) => {
-  const { title, prompt, department, assignedTo } = req.body || {};
+app.post("/api/tasks", async (req, reply) => {
+  let title, prompt, department, assignedTo;
+  const files = [];
+  if (req.isMultipart()) {
+    for await (const part of req.parts()) {
+      if (part.type === "file") {
+        const buf = await part.toBuffer();
+        files.push({ filename: part.filename, mime: part.mimetype, data: buf.toString("base64"), size: buf.length });
+      } else if (part.fieldname === "title") title = part.value;
+      else if (part.fieldname === "prompt") prompt = part.value;
+      else if (part.fieldname === "department") department = part.value;
+    }
+  } else {
+    ({ title, prompt, department, assignedTo } = req.body || {});
+  }
   if (!title || !String(title).trim()) return reply.code(400).send({ error: "title required" });
   const dept = department && VALID_DEPARTMENTS.has(department) ? department : null;
   const task = createTask({ title: String(title).trim(), prompt, department: dept, assignedTo: assignedTo || null, createdBy: "user" });
-  reply.code(201).send(task);
+  for (const f of files) createAttachment({ taskId: task.id, ...f });
+  // Re-broadcast so the task carries its attachments to all clients.
+  bus.emit("task", serializeTaskWithAttachments(task.id));
+  reply.code(201).send({ ...task, attachments: getAttachments(task.id).map(serializeAttachment) });
+});
+
+function serializeTaskWithAttachments(id) {
+  const t = getTask(id);
+  return { ...t, attachments: getAttachments(id).map(serializeAttachment) };
+}
+
+app.get("/api/attachments/:id", (req, reply) => {
+  const a = getAttachment(req.params.id);
+  if (!a) return reply.code(404).send({ error: "not found" });
+  reply
+    .header("Content-Type", a.mime || "application/octet-stream")
+    .header("Content-Disposition", `inline; filename="${a.filename}"`)
+    .send(Buffer.from(a.data, "base64"));
 });
 
 app.get("/api/tasks/:id", (req, reply) => {

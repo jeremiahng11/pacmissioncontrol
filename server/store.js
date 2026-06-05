@@ -21,6 +21,7 @@ const state = {
   documents: [], // newest-first deliverables (durable, not pruned with the queue)
   memory: new Map(), // scope (department) -> rolling knowledge base
   issues: [], // newest-first; system/quality problems raised to the Group CTO
+  attachments: new Map(), // id -> {id, taskId, filename, mime, data(base64), size}
 };
 let eventSeq = 1;
 let pool = null;
@@ -41,6 +42,24 @@ function timeAgo(ms) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/* ---------- attachments (files for the agent to work with) ---------- */
+export const getAttachments = (taskId) => [...state.attachments.values()].filter((a) => a.taskId === taskId);
+export const getAttachment = (id) => state.attachments.get(id);
+export const serializeAttachment = (a) => ({ id: a.id, taskId: a.taskId, filename: a.filename, mime: a.mime, size: a.size });
+export function createAttachment({ taskId, filename, mime, data, size }) {
+  const att = { id: randomUUID(), taskId, filename: filename || "file", mime: mime || "application/octet-stream", data, size: size || 0 };
+  state.attachments.set(att.id, att);
+  if (pool) pool.query(
+    "INSERT INTO attachments (id,task_id,filename,mime,data,size) VALUES ($1,$2,$3,$4,$5,$6)",
+    [att.id, att.taskId, att.filename, att.mime, att.data, att.size]
+  ).catch((e) => console.error("[store] persistAttachment", e.message));
+  return att;
+}
+function deleteAttachmentsForTask(taskId) {
+  for (const a of getAttachments(taskId)) state.attachments.delete(a.id);
+  if (pool) pool.query("DELETE FROM attachments WHERE task_id=$1", [taskId]).catch(() => {});
+}
+
 /* ---------- serialization (what clients see) ---------- */
 export function serializeAgent(a) {
   return {
@@ -58,7 +77,7 @@ export function serializeAgent(a) {
   };
 }
 export function serializeTask(t) {
-  return { ...t };
+  return { ...t, attachments: getAttachments(t.id).map(serializeAttachment) };
 }
 
 /* ---------- boot ---------- */
@@ -78,7 +97,7 @@ export async function initStore() {
     await migrate();
   }
   await loadAgents();
-  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); }
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); }
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
 }
 
@@ -113,6 +132,11 @@ async function migrate() {
       task_id text, agent_id text, resolved boolean DEFAULT false,
       created_at timestamptz DEFAULT now()
     );
+    CREATE TABLE IF NOT EXISTS attachments (
+      id text PRIMARY KEY, task_id text, filename text, mime text,
+      data text, size int, created_at timestamptz DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id);
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at DESC);
@@ -141,6 +165,11 @@ async function loadIssues() {
     taskId: r.task_id, agentId: r.agent_id, resolved: r.resolved,
     createdAt: new Date(r.created_at).getTime(),
   });
+}
+async function loadAttachments() {
+  // Load metadata only (data is fetched on demand) for tasks still around.
+  const { rows } = await pool.query("SELECT id, task_id, filename, mime, data, size FROM attachments");
+  for (const r of rows) state.attachments.set(r.id, { id: r.id, taskId: r.task_id, filename: r.filename, mime: r.mime, data: r.data, size: r.size });
 }
 
 async function loadAgents() {
@@ -411,6 +440,7 @@ export function deleteTask(id) {
   const t = state.tasks.get(id);
   if (!t) return false;
   state.tasks.delete(id);
+  deleteAttachmentsForTask(id);
   if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [id]).catch(() => {});
   bus.emit("task", { id, deleted: true });
   return true;

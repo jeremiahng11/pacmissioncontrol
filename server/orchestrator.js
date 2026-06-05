@@ -5,7 +5,7 @@
 
 import {
   bus, getWorkers, getTasks, setAgent, createTask, updateTask, addEvent,
-  createDocument, getMemoryText, appendMemory, createIssue,
+  createDocument, getMemoryText, appendMemory, createIssue, getAttachments,
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory } from "./gemini.js";
 import { DEPARTMENTS } from "./agents.js";
@@ -57,9 +57,15 @@ async function runTask(agent, task) {
     // Any output from a prior attempt becomes context so the agent CONTINUES
     // the work instead of starting cold (re-queues and manual "Continue").
     const priorWork = isUser ? (task.result || null) : null;
+    // Attached files the agent can read (images / PDF / text). Gemini-supported types only.
+    const media = isUser
+      ? getAttachments(task.id)
+          .filter((a) => /^image\//.test(a.mime) || a.mime === "application/pdf" || /^text\//.test(a.mime))
+          .map((a) => ({ mimeType: a.mime, data: a.data }))
+      : [];
     let result;
     try {
-      result = await runWork(agent, task, memoryText, model, priorWork);
+      result = await runWork(agent, task, memoryText, model, priorWork, media);
     } catch (err) { handleError(agent, task, err); return; }
     updateTask(task.id, { status: "review", result });
 

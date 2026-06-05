@@ -85,7 +85,7 @@ export function useAgentSocket() {
     return () => { stopped = true; try { ws && ws.close(); } catch {} };
   }, []);
 
-  const assignTask = useCallback((t) => api.createTask(t).catch((e) => console.error(e)), []);
+  const assignTask = useCallback((t, files) => api.createTask(t, files).catch((e) => console.error(e)), []);
   const deleteTask = useCallback((id) => api.deleteTask(id).catch(() => {}), []);
   const retryTask = useCallback((id) => api.retryTask(id).catch(() => {}), []);
   const clearTasks = useCallback((scope) => api.clearTasks(scope).catch(() => {}), []);

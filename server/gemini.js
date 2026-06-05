@@ -15,13 +15,16 @@ function isRateLimit(msg) {
 
 const TIMEOUT_MS = 60000; // a hung/slow call must not freeze an agent forever
 
-async function generate(system, prompt, { json = false, temperature = 0.7, model } = {}) {
+async function generate(system, prompt, { json = false, temperature = 0.7, model, media } = {}) {
+  const contents = media && media.length
+    ? [{ role: "user", parts: [{ text: prompt }, ...media.map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))] }]
+    : prompt;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await Promise.race([
         ai.models.generateContent({
           model: model || GEMINI_MODEL,
-          contents: prompt,
+          contents,
           config: {
             systemInstruction: system,
             temperature,
@@ -58,7 +61,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 /* Worker performs the task, building on the department's memory.
    model=null (or no key) => simulated path: no API call, no cost. */
-export async function runWork(agent, task, memoryText = "", model = null, priorWork = null) {
+export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = []) {
   if (!ai || !model) {
     await wait(1200 + Math.random() * 1800);
     return !model
@@ -73,12 +76,15 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const priorBlock = priorWork
     ? `\n\nPREVIOUS ATTEMPT (this was incomplete — CONTINUE from it: keep what's good, fix the gaps, and deliver the COMPLETE result):\n${priorWork}`
     : "";
+  const fileBlock = media && media.length
+    ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
+    : "";
   const out = await generate(
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
       `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
       `No preamble like "Here is" — start directly with the title heading.`,
-    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}`,
-    { model }
+    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fileBlock}`,
+    { model, media }
   );
   return out || `Done: ${task.title}.`;
 }
