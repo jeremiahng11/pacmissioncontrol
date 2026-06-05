@@ -538,20 +538,20 @@ export default function AgentOffice() {
     const item = jayQueue.current.shift();
     if (item) {
       // Task ready: leave HQ, walk to the agent's room, announce it, return.
-      const c = spot(item.room, 0.4 + Math.random() * 0.2, 0.5 + Math.random() * 0.16);
+      const c = spot(item.room, 0.4 + Math.random() * 0.2, 0.62 + Math.random() * 0.14);
       if (!c) { T.push(setTimeout(jayStep, 1200)); return; }
       const dur = goTo(c, `→ ${item.name}: ${item.task}`);
       setSay({ room: item.room, text: "on it!" });
       T.push(setTimeout(() => {
         setJay((j) => ({ ...j, say: null }));
         setSay((s) => (s && s.room === item.room ? null : s));
-        const home = spot("COMMAND HQ", 0.35 + Math.random() * 0.3, 0.5 + Math.random() * 0.16);
+        const home = spot("COMMAND HQ", 0.35 + Math.random() * 0.3, 0.62 + Math.random() * 0.14);
         if (home) goTo(home);
         T.push(setTimeout(jayStep, 1600));
       }, dur * 1000 + 1700));
     } else if (Math.random() > 0.28) {
       // Pace around HQ: a fresh spot (varied x and y), then a pause.
-      const c = spot("COMMAND HQ", 0.15 + Math.random() * 0.7, 0.4 + Math.random() * 0.34);
+      const c = spot("COMMAND HQ", 0.15 + Math.random() * 0.7, 0.6 + Math.random() * 0.2);
       const dur = c ? goTo(c) : 0;
       T.push(setTimeout(jayStep, dur * 1000 + 900 + Math.random() * 2600));
     } else {
@@ -564,7 +564,7 @@ export default function AgentOffice() {
   useEffect(() => {
     if (view !== "visual") return;
     const start = setTimeout(() => {
-      const home = spot("COMMAND HQ", 0.5, 0.58);
+      const home = spot("COMMAND HQ", 0.5, 0.66);
       if (home) { jayPosRef.current = home; setJay((j) => (j.coords ? j : { coords: home, facing: "right", say: null, dur: 0.2 })); }
       jayStep();
     }, 200);

@@ -117,7 +117,10 @@ export async function initStore() {
     await migrate();
   }
   await loadAgents();
-  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); await loadRoutines(); await loadCredentials(); reconcileIssues(); }
+  // Issues are session-scoped (in-memory) on purpose — not reloaded from the DB,
+  // so a dismissed/cleared issue can never resurrect on restart.
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadAttachments(); await loadRoutines(); await loadCredentials(); }
+  if (pool) pool.query("DELETE FROM issues").catch(() => {}); // clear any stale persisted issues
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
 }
 
@@ -615,7 +618,7 @@ export function deleteTask(id) {
   deleteAttachmentsForTask(id);
   deleteIssuesForTask(id);
   deleteCredentialsForTask(id);
-  if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [id]).catch(() => {});
+  if (pool) pool.query("DELETE FROM tasks WHERE id=$1", [id]).catch((e) => console.error("[store] deleteTask DB", e.message));
   bus.emit("task", { id, deleted: true });
   return true;
 }
