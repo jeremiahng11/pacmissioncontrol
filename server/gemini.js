@@ -74,7 +74,9 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     ? `\n\nPREVIOUS ATTEMPT (this was incomplete — CONTINUE from it: keep what's good, fix the gaps, and deliver the COMPLETE result):\n${priorWork}`
     : "";
   const out = await generate(
-    `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. Follow any format the task requests. No preamble like "Here is" — start directly with the title heading.`,
+    `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
+      `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
+      `No preamble like "Here is" — start directly with the title heading.`,
     `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}`,
     { model }
   );
@@ -104,7 +106,9 @@ export async function runReview(task, result, model = null) {
     return { complete: true, note: !model ? "demo" : "approved (sim)" };
   }
   const txt = await generate(
-    'You are JAY JAY, the CTO, reviewing a deliverable. Decide if it adequately completes the task. Respond ONLY as JSON: {"complete": boolean, "note": string up to 10 words}.',
+    "You are JAY JAY, the CTO, reviewing a deliverable. The deliverable is Markdown TEXT; the user can download it as a Word (.doc) file from the app. " +
+      "Judge ONLY whether the CONTENT substantively completes the task. Do NOT reject it for file format, for \"not being a .doc/.pdf/Word file\", or for being text — formatting/export is handled by the app. " +
+      "Approve (complete=true) unless the content is clearly wrong, off-topic, or materially incomplete. Respond ONLY as JSON: {\"complete\": boolean, \"note\": string up to 12 words}.",
     `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${result}`,
     { json: true, temperature: 0.2, model }
   );
