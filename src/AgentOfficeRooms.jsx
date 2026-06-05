@@ -491,7 +491,7 @@ export default function AgentOffice() {
         {view === "visual" && (
           <>
             <div style={SS.head}>
-              <h1 style={SS.h1}><Gamepad2 size={20} /> Agent Office {settings.paused && <span style={SS.pausedChip}>PAUSED</span>}</h1>
+              <h1 style={SS.h1}><Gamepad2 size={20} /> CTO Agent Office {settings.paused && <span style={SS.pausedChip}>PAUSED</span>}</h1>
               <div style={SS.controls}>
                 <button onClick={() => control("dispatch")} className="mc-btn" style={{ ...SS.btn, ...SS.gold }}><Crown size={12} /> DISPATCH</button>
                 <button onClick={() => control("all_hands")} className="mc-btn" style={{ ...SS.btn, ...SS.go }}><Zap size={12} /> ALL HANDS</button>
