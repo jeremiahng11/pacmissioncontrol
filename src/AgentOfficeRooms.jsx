@@ -95,9 +95,10 @@ const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW
 /* --- Pac-Man sprite for the CTO (Jay Jay) --- */
 const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "idle" }) {
   const dur = status === "working" || status === "command" ? "0.34s" : status === "thinking" ? "0.5s" : "0.95s";
-  // Both states keep a clearly-visible wedge so it always reads as Pac-Man.
-  const open = "M50,50 L87.7,23.6 A46,46 0 1 1 87.7,76.4 Z";   // mouth wide (~70deg)
-  const closed = "M50,50 L95.3,42 A46,46 0 1 1 95.3,58 Z";      // mouth narrow (~20deg)
+  // Both states keep a clearly-visible mouth so it always reads as Pac-Man.
+  // (sweep-flag 0 draws the body — the circle minus the mouth — not the wedge.)
+  const open = "M50,50 L87.7,23.6 A46,46 0 1 0 87.7,76.4 Z";   // mouth wide (~70deg)
+  const closed = "M50,50 L95.3,42 A46,46 0 1 0 95.3,58 Z";      // mouth narrow (~20deg)
   return (
     <svg width={size} height={size} viewBox="-8 -18 116 124" shapeRendering="geometricPrecision"
       style={{ overflow: "visible", display: "block" }}>
