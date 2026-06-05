@@ -123,10 +123,15 @@ function handleError(agent, task, err) {
       : "Check GEMINI_API_KEY and that the model is enabled for your project.";
     createIssue({ kind: c.kind, title, detail: `${hint}\n\n${c.msg.slice(0, 400)}`, taskId: task.id, agentId: agent.id });
     addEvent({ kind: "issue", text: `⚠️ ${c.kind} issue — ${agent.name} blocked on "${task.title}"`, agentId: agent.id, taskId: task.id });
-    if (settings.autonomous) {
-      settings.autonomous = false;
+    // Stop the office so queued tasks don't keep failing and spawning new
+    // issues. The user fixes the cause (billing/model), then presses ALL HANDS.
+    settings.autonomous = false;
+    if (!settings.paused) {
+      settings.paused = true;
       bus.emit("settings", getSettings());
-      addEvent({ kind: "system", text: `Jay Jay paused AUTO — unresolved ${c.kind} issue` });
+      addEvent({ kind: "system", text: `Jay Jay paused the office — fix the ${c.kind} (billing / GEMINI_MODEL), then press ALL HANDS` });
+    } else {
+      bus.emit("settings", getSettings());
     }
   } else if ((task.attempts || 0) + 1 < MAX_ATTEMPTS) {
     updateTask(task.id, { status: "queued", attempts: (task.attempts || 0) + 1, startedAt: null, reviewNotes: c.msg.slice(0, 200) });
