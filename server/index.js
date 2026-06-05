@@ -13,7 +13,7 @@ import { WebSocketServer } from "ws";
 import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
-  initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, updateTask,
+  initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, updateTask, addEvent,
   getDocument, deleteDocument, deleteMemory, resolveIssue,
   createAttachment, getAttachment, getAttachments, serializeAttachment,
 } from "./store.js";
@@ -166,12 +166,16 @@ app.post("/api/tasks/clear", (req, reply) => {
   reply.send({ removed: clearTasks(scope) });
 });
 
-app.post("/api/tasks/:id/retry", (req, reply) => {
+app.post("/api/tasks/:id/retry", async (req, reply) => {
   const t = getTask(req.params.id);
   if (!t) return reply.code(404).send({ error: "not found" });
   if (!["failed", "blocked"].includes(t.status)) return reply.code(400).send({ error: "only failed or blocked tasks can be continued" });
-  // Keep the partial result so the agent continues from it.
+  // Keep the partial result so the agent continues from it. Also resume if the
+  // office was clocked out, log it, and kick a dispatch so it picks up now.
+  if (getSettings().paused) setSetting("paused", false);
   updateTask(t.id, { status: "queued", attempts: 0, startedAt: null, completedAt: null, reviewNotes: "continuing from previous attempt" });
+  addEvent({ kind: "system", text: `Jay Jay re-dispatching: ${t.title}`, taskId: t.id });
+  await dispatchNow();
   reply.send({ ok: true });
 });
 
