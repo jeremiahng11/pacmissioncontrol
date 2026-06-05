@@ -479,7 +479,7 @@ export default function AgentOffice() {
   const [files, setFiles] = useState([]);
   const [credForm, setCredForm] = useState({ name: "", value: "" });
   const [followText, setFollowText] = useState("");
-  const [mission, setMission] = useState({ name: "", department: "", tasks: "" });
+  const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }] });
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -740,12 +740,27 @@ export default function AgentOffice() {
                 <div style={{ borderTop: "1px solid #1a2440", margin: "6px 0 2px" }} />
                 <div style={SS.secTitle}>LAUNCH A MISSION</div>
                 <input style={SS.input} placeholder="Mission name (e.g. Launch v2)" value={mission.name} onChange={(e) => setMission((m) => ({ ...m, name: e.target.value }))} />
-                <select style={SS.select} value={mission.department} onChange={(e) => setMission((m) => ({ ...m, department: e.target.value }))}>
-                  {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-                <textarea style={SS.textarea} rows={5} placeholder={"One task per line, e.g.\nResearch competitors\nDraft the brief\nBuild the landing page"} value={mission.tasks} onChange={(e) => setMission((m) => ({ ...m, tasks: e.target.value }))} />
-                <button style={SS.assignBtn} onClick={() => { const lines = mission.tasks.split("\n").map((s) => s.trim()).filter(Boolean); if (!lines.length) return; createMission({ name: mission.name.trim(), department: mission.department || null, tasks: lines }); setMission((m) => ({ ...m, name: "", tasks: "" })); }}><Plus size={13} /> LAUNCH MISSION</button>
-                <div style={SS.composeHint}>One task per line. Jay Jay assigns them and works through the list in order.</div>
+                {mission.items.map((it, i) => (
+                  <div key={i} style={SS.missionItem}>
+                    <div style={SS.missionItemHead}>
+                      <span style={{ fontSize: 9, color: "#5e7088", fontWeight: 700, letterSpacing: 1 }}>TASK {i + 1}</span>
+                      {mission.items.length > 1 && <button style={SS.miX} onClick={() => setMission((m) => ({ ...m, items: m.items.filter((_, idx) => idx !== i) }))}><X size={11} /></button>}
+                    </div>
+                    <input style={SS.input} placeholder="Task title" value={it.title} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x) }))} />
+                    <textarea style={SS.textarea} rows={3} placeholder="Detailed description / instructions for this task" value={it.description} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, description: e.target.value } : x) }))} />
+                    <select style={SS.select} value={it.department} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, department: e.target.value } : x) }))}>
+                      {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <button style={SS.ghostBtn} onClick={() => setMission((m) => ({ ...m, items: [...m.items, { title: "", description: "", department: "" }] }))}><Plus size={12} /> ADD ANOTHER TASK</button>
+                <button style={SS.assignBtn} onClick={() => {
+                  const tasks = mission.items.filter((it) => it.title.trim()).map((it) => ({ title: it.title.trim(), prompt: it.description.trim() || it.title.trim(), department: it.department || null }));
+                  if (!tasks.length) return;
+                  createMission({ name: mission.name.trim(), tasks });
+                  setMission({ name: "", items: [{ title: "", description: "", department: "" }] });
+                }}><Plus size={13} /> LAUNCH MISSION</button>
+                <div style={SS.composeHint}>Add as many tasks as you like — each with its own description and agent. Jay Jay assigns and works the list.</div>
               </div>
               <div style={SS.tasksList}>
                 <div style={SS.tasksListHead}>
@@ -976,6 +991,9 @@ const SS = {
   taskRowTitle: { fontSize: 12, color: "#e8edff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   taskRowWho: { fontSize: 9, color: "#8aa0c0", letterSpacing: 0.5 },
   missionTag: { fontSize: 8.5, color: "#c4b5fd", background: "rgba(168,85,247,.12)", border: "1px solid rgba(168,85,247,.4)", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
+  missionItem: { display: "flex", flexDirection: "column", gap: 6, padding: 9, borderRadius: 8, border: "1px solid #1a2440", background: "#0a1020" },
+  missionItemHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  miX: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 0, display: "flex" },
   routineRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440" },
   routineTitle: { fontSize: 12.5, fontWeight: 700, color: "#e8edff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   routineMeta: { fontSize: 10, color: "#8aa0c0", marginTop: 2 },

@@ -129,11 +129,21 @@ app.get("/api/attachments/:id", (req, reply) => {
 app.post("/api/missions", (req, reply) => {
   const b = req.body || {};
   const name = String(b.name || "").trim();
-  const dept = b.department && VALID_DEPARTMENTS.has(b.department) ? b.department : null;
-  const lines = (Array.isArray(b.tasks) ? b.tasks : String(b.tasks || "").split("\n"))
-    .map((s) => String(s).trim()).filter(Boolean).slice(0, 50);
-  if (!lines.length) return reply.code(400).send({ error: "no tasks" });
-  const created = lines.map((title) => createTask({ title, prompt: title, department: dept, createdBy: "user", mission: name || null }));
+  const defaultDept = b.department && VALID_DEPARTMENTS.has(b.department) ? b.department : null;
+  const items = (Array.isArray(b.tasks) ? b.tasks : String(b.tasks || "").split("\n")).slice(0, 50);
+  const created = [];
+  for (const it of items) {
+    let title, prompt, dept;
+    if (typeof it === "string") { title = it.trim(); prompt = title; dept = defaultDept; }
+    else {
+      title = String(it.title || "").trim();
+      prompt = String(it.prompt || it.description || title).trim();
+      dept = it.department && VALID_DEPARTMENTS.has(it.department) ? it.department : defaultDept;
+    }
+    if (!title) continue;
+    created.push(createTask({ title, prompt: prompt || title, department: dept, createdBy: "user", mission: name || null }));
+  }
+  if (!created.length) return reply.code(400).send({ error: "no tasks" });
   reply.code(201).send({ count: created.length });
 });
 
