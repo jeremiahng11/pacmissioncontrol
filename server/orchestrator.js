@@ -46,10 +46,10 @@ async function runTask(agent, task) {
     addEvent({ kind: "assign", text: `Jay Jay → ${agent.name}: ${task.title}`, agentId: agent.id, taskId: task.id });
     await wait(800 + Math.random() * 700);
 
-    // Tasks YOU assign run on the real model (GEMINI_MODEL). The AUTO demo is
-    // simulated (model=null, no API) unless GEMINI_DEMO_MODEL is set (e.g.
-    // free-tier flash). Demo tasks never produce real documents/memory.
-    const isUser = task.createdBy === "user";
+    // Real work (your tasks + scheduled routines) runs on GEMINI_MODEL and
+    // produces docs/memory. Only the AUTO demo (createdBy 'cto') is simulated
+    // (model=null) or runs on the free demo model.
+    const isUser = task.createdBy !== "cto";
     const model = isUser ? GEMINI_MODEL : (GEMINI_DEMO_MODEL || null);
 
     setAgent(agent.id, { status: "working", task: task.title });

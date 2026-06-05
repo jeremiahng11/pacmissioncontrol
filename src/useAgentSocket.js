@@ -12,6 +12,7 @@ export function useAgentSocket() {
   const [documents, setDocuments] = useState([]);
   const [memory, setMemory] = useState([]);
   const [issues, setIssues] = useState([]);
+  const [routines, setRoutines] = useState([]);
   const [settings, setSettings] = useState({ paused: false, autonomous: true });
   const [gemini, setGemini] = useState(false);
   const [model, setModel] = useState("");
@@ -31,6 +32,7 @@ export function useAgentSocket() {
       setDocuments(s.documents || []);
       setMemory(s.memory || []);
       setIssues(s.issues || []);
+      setRoutines(s.routines || []);
       if (s.settings) setSettings(s.settings);
       if (typeof s.gemini === "boolean") setGemini(s.gemini);
       if (typeof s.model === "string") setModel(s.model);
@@ -76,6 +78,10 @@ export function useAgentSocket() {
             else setIssues((p) => [m.issue, ...p.filter((i) => i.id !== m.issue.id)]);
             break;
           case "issues": setIssues(m.issues || []); break;
+          case "routine":
+            if (m.routine.deleted) setRoutines((p) => p.filter((x) => x.id !== m.routine.id));
+            else setRoutines((p) => { const i = p.findIndex((x) => x.id === m.routine.id); if (i < 0) return [...p, m.routine]; const n = [...p]; n[i] = m.routine; return n; });
+            break;
           case "settings": setSettings(m.settings); break;
           default: break;
         }
@@ -106,6 +112,9 @@ export function useAgentSocket() {
     setIssues([]);
     return api.clearIssues().catch(() => {});
   }, []);
+  const createRoutine = useCallback((r) => api.createRoutine(r).catch((e) => console.error(e)), []);
+  const updateRoutine = useCallback((id, patch) => api.updateRoutine(id, patch).catch(() => {}), []);
+  const deleteRoutine = useCallback((id) => api.deleteRoutine(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues };
+  return { agents, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, createRoutine, updateRoutine, deleteRoutine };
 }

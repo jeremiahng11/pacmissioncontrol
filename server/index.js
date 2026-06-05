@@ -16,7 +16,9 @@ import {
   initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, updateTask, addEvent,
   getDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues,
   createAttachment, getAttachment, getAttachments, serializeAttachment,
+  createRoutine, updateRoutine, deleteRoutine, VALID_CADENCE,
 } from "./store.js";
+import { startScheduler, seedRoutines } from "./schedule.js";
 import multipart from "@fastify/multipart";
 import {
   startOrchestrator, dispatchNow, allHands, clockOut, getSettings, setSetting,
@@ -164,6 +166,29 @@ app.post("/api/issues/clear", (req, reply) => {
   reply.send({ removed: clearIssues() });
 });
 
+/* ---------- routines (Calendar / standing duties) ---------- */
+app.post("/api/routines", (req, reply) => {
+  const b = req.body || {};
+  if (!b.title || !String(b.title).trim()) return reply.code(400).send({ error: "title required" });
+  if (!VALID_CADENCE.has(b.cadenceType)) return reply.code(400).send({ error: "bad cadenceType" });
+  const dept = b.department && VALID_DEPARTMENTS.has(b.department) ? b.department : null;
+  const r = createRoutine({
+    title: String(b.title).trim(), prompt: b.prompt, department: dept, cadenceType: b.cadenceType,
+    everyMinutes: b.everyMinutes ? Number(b.everyMinutes) : null, dailyTime: b.dailyTime || null,
+    runAt: b.runAt ? new Date(b.runAt).getTime() : null, estimateMinutes: b.estimateMinutes ? Number(b.estimateMinutes) : null,
+    enabled: b.enabled !== false, createdBy: "user",
+  });
+  reply.code(201).send(r);
+});
+app.patch("/api/routines/:id", (req, reply) => {
+  const r = updateRoutine(req.params.id, req.body || {});
+  if (!r) return reply.code(404).send({ error: "not found" });
+  reply.send(r);
+});
+app.delete("/api/routines/:id", (req, reply) => {
+  reply.code(deleteRoutine(req.params.id) ? 204 : 404).send();
+});
+
 app.post("/api/tasks/clear", (req, reply) => {
   const scope = (req.body && req.body.scope) || "done";
   if (!["auto", "done", "all"].includes(scope)) return reply.code(400).send({ error: "bad scope" });
@@ -219,7 +244,7 @@ const sockets = new Set();
 const wss = new WebSocketServer({ noServer: true });
 
 const broadcast = (frame) => { for (const ws of sockets) if (ws.readyState === ws.OPEN) ws.send(frame); };
-for (const type of ["agent", "task", "event", "settings", "document", "memory", "issue"]) {
+for (const type of ["agent", "task", "event", "settings", "document", "memory", "issue", "routine"]) {
   bus.on(type, (payload) => {
     broadcast(JSON.stringify(type === "settings" ? { type, settings: payload } : { type, [type]: payload }));
   });
@@ -248,6 +273,8 @@ app.server.on("upgrade", (req, socket, head) => {
 
 /* ---------- boot ---------- */
 await initStore();
+seedRoutines();
 startOrchestrator();
+startScheduler();
 await app.listen({ port: PORT, host: HOST });
 console.log(`[mission-control] http://${HOST}:${PORT}  (gemini: ${usingGemini ? "live" : "simulated"})`);

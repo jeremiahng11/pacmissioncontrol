@@ -44,8 +44,14 @@ const NAV = [
 
 const PLACEHOLDER = {
   content:  { icon: Satellite, title: "Content",  desc: "Plan and track the content your agents produce." },
-  calendar: { icon: Calendar,  title: "Calendar", desc: "Scheduled runs and upcoming agent tasks." },
   projects: { icon: Rocket,    title: "Projects", desc: "Group missions into projects and follow their progress." },
+};
+
+const fmtCadence = (r) => {
+  if (r.cadenceType === "interval") return r.everyMinutes >= 60 && r.everyMinutes % 60 === 0 ? `every ${r.everyMinutes / 60}h` : `every ${r.everyMinutes}m`;
+  if (r.cadenceType === "daily") return `daily ${r.dailyTime} UTC`;
+  if (r.cadenceType === "once") return `once`;
+  return r.cadenceType;
 };
 
 const DEPT_LABEL = { command: "CTO Office", observatory: "Observatory", security: "Security", research_lab: "Research Lab", development: "Development Center", admin: "Admin" };
@@ -368,6 +374,61 @@ function IssuesView({ issues, byId, onResolve, onRetry, onClearAll }) {
   );
 }
 
+function CalendarView({ routines, onCreate, onToggle, onDelete }) {
+  const [f, setF] = useState({ title: "", prompt: "", department: "security", cadenceType: "interval", everyHours: 6, dailyTime: "09:00", runAt: "" });
+  const submit = (e) => {
+    e.preventDefault();
+    const title = f.title.trim();
+    if (!title) return;
+    const payload = { title, prompt: f.prompt.trim() || title, department: f.department || null, cadenceType: f.cadenceType, enabled: true };
+    if (f.cadenceType === "interval") payload.everyMinutes = Math.max(1, Number(f.everyHours) || 6) * 60;
+    if (f.cadenceType === "daily") payload.dailyTime = f.dailyTime;
+    if (f.cadenceType === "once") payload.runAt = f.runAt;
+    onCreate(payload);
+    setF((p) => ({ ...p, title: "", prompt: "" }));
+  };
+  const sorted = [...routines].sort((a, b) => (a.nextRunAt || Infinity) - (b.nextRunAt || Infinity));
+  return (
+    <div style={SS.libWrap}>
+      <h1 style={SS.h1}><Calendar size={20} /> Calendar</h1>
+      <div style={SS.libSub}>Scheduled &amp; recurring duties. Jay Jay runs them automatically and dispatches to the right agent — e.g. Warden's security sweep, a daily digest. These run <b>real</b> tasks (use the API), so keep the cadence sensible. Times are <b>UTC</b>.</div>
+      <div style={SS.tasksGrid}>
+        <form style={SS.tasksCompose} onSubmit={submit}>
+          <div style={SS.secTitle}>NEW SCHEDULE</div>
+          <input style={SS.input} placeholder="Title (e.g. Security sweep)" value={f.title} onChange={(e) => setF((p) => ({ ...p, title: e.target.value }))} />
+          <textarea style={SS.textarea} rows={3} placeholder="What should the agent do each time?" value={f.prompt} onChange={(e) => setF((p) => ({ ...p, prompt: e.target.value }))} />
+          <select style={SS.select} value={f.department} onChange={(e) => setF((p) => ({ ...p, department: e.target.value }))}>
+            {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <select style={SS.select} value={f.cadenceType} onChange={(e) => setF((p) => ({ ...p, cadenceType: e.target.value }))}>
+            <option value="interval">Every N hours</option>
+            <option value="daily">Daily at a time</option>
+            <option value="once">Once at a time</option>
+          </select>
+          {f.cadenceType === "interval" && <input style={SS.input} type="number" min="1" placeholder="hours" value={f.everyHours} onChange={(e) => setF((p) => ({ ...p, everyHours: e.target.value }))} />}
+          {f.cadenceType === "daily" && <input style={SS.input} type="time" value={f.dailyTime} onChange={(e) => setF((p) => ({ ...p, dailyTime: e.target.value }))} />}
+          {f.cadenceType === "once" && <input style={SS.input} type="datetime-local" value={f.runAt} onChange={(e) => setF((p) => ({ ...p, runAt: e.target.value }))} />}
+          <button type="submit" style={SS.assignBtn}><Plus size={13} /> ADD SCHEDULE</button>
+        </form>
+        <div style={SS.tasksList}>
+          <div style={SS.secTitle}>SCHEDULES · {routines.filter((r) => r.enabled).length} active</div>
+          {sorted.length === 0 && <div style={SS.queueEmpty}>No schedules yet. Add one (e.g. enable Warden's security sweep).</div>}
+          {sorted.map((r) => (
+            <div key={r.id} style={SS.routineRow}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={SS.routineTitle}>{r.title}</div>
+                <div style={SS.routineMeta}>{deptLabel(r.department) || "Any dept"} · {fmtCadence(r)}{r.enabled && r.nextRunAt ? ` · next ${fmtWhen(r.nextRunAt)}` : " · paused"}</div>
+              </div>
+              <button style={{ ...SS.chip, ...(r.enabled ? SS.chipActive : {}) }} onClick={() => onToggle(r)}>{r.enabled ? "ON" : "OFF"}</button>
+              <button style={SS.memDel} title="Delete" onClick={() => { if (confirm("Delete this schedule?")) onDelete(r.id); }}><Trash2 size={12} /></button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Placeholder({ icon: Icon, title, desc }) {
   return (
     <div style={SS.placeholder}>
@@ -380,7 +441,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -669,6 +730,8 @@ export default function AgentOffice() {
 
         {view === "memory" && <MemoryView memory={memory} onDelete={deleteMemory} />}
 
+        {view === "calendar" && <CalendarView routines={routines} onCreate={createRoutine} onToggle={(r) => updateRoutine(r.id, { enabled: !r.enabled })} onDelete={deleteRoutine} />}
+
         {view === "issues" && <IssuesView issues={issues} byId={byId} onClearAll={clearIssues} onResolve={resolveIssue} onRetry={(i) => {
           if (!i.taskId) { alert("This issue has no task to retry — dismissing it."); resolveIssue(i.id); return; }
           retryTask(i.taskId)
@@ -818,6 +881,9 @@ const SS = {
   taskRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440", cursor: "pointer" },
   taskRowTitle: { fontSize: 12, color: "#e8edff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   taskRowWho: { fontSize: 9, color: "#8aa0c0", letterSpacing: 0.5 },
+  routineRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440" },
+  routineTitle: { fontSize: 12.5, fontWeight: 700, color: "#e8edff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  routineMeta: { fontSize: 10, color: "#8aa0c0", marginTop: 2 },
   secTitle: { fontSize: 9, letterSpacing: 1.5, color: "#5e7088", fontWeight: 700, margin: "2px 0" },
   compose: { display: "flex", flexDirection: "column", gap: 7 },
   select: { padding: "8px 9px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11 },

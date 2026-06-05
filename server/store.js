@@ -22,6 +22,7 @@ const state = {
   memory: new Map(), // scope (department) -> rolling knowledge base
   issues: [], // newest-first; system/quality problems raised to the Group CTO
   attachments: new Map(), // id -> {id, taskId, filename, mime, data(base64), size}
+  routines: new Map(), // id -> scheduled/recurring task definition
 };
 let eventSeq = 1;
 let pool = null;
@@ -97,7 +98,7 @@ export async function initStore() {
     await migrate();
   }
   await loadAgents();
-  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); reconcileIssues(); }
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadIssues(); await loadAttachments(); await loadRoutines(); reconcileIssues(); }
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
 }
 
@@ -148,6 +149,13 @@ async function migrate() {
       data text, size int, created_at timestamptz DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_attachments_task ON attachments(task_id);
+    CREATE TABLE IF NOT EXISTS routines (
+      id text PRIMARY KEY, title text, prompt text, department text,
+      cadence_type text, every_minutes int, daily_time text, run_at timestamptz,
+      estimate_minutes int, enabled boolean DEFAULT true,
+      next_run_at timestamptz, last_run_at timestamptz,
+      created_by text, created_at timestamptz DEFAULT now()
+    );
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at DESC);
@@ -181,6 +189,17 @@ async function loadAttachments() {
   // Load metadata only (data is fetched on demand) for tasks still around.
   const { rows } = await pool.query("SELECT id, task_id, filename, mime, data, size FROM attachments");
   for (const r of rows) state.attachments.set(r.id, { id: r.id, taskId: r.task_id, filename: r.filename, mime: r.mime, data: r.data, size: r.size });
+}
+async function loadRoutines() {
+  const { rows } = await pool.query("SELECT * FROM routines");
+  for (const r of rows) state.routines.set(r.id, {
+    id: r.id, title: r.title, prompt: r.prompt, department: r.department,
+    cadenceType: r.cadence_type, everyMinutes: r.every_minutes, dailyTime: r.daily_time,
+    runAt: r.run_at ? new Date(r.run_at).getTime() : null, estimateMinutes: r.estimate_minutes,
+    enabled: r.enabled, nextRunAt: r.next_run_at ? new Date(r.next_run_at).getTime() : null,
+    lastRunAt: r.last_run_at ? new Date(r.last_run_at).getTime() : null,
+    createdBy: r.created_by, createdAt: new Date(r.created_at).getTime(),
+  });
 }
 
 async function loadAgents() {
@@ -300,6 +319,13 @@ const serializeDocMeta = (d) => ({
 const serializeMemory = (m) => ({ scope: m.scope, title: m.title, content: m.content, updatedAt: m.updatedAt, updatedBy: m.updatedBy });
 const serializeIssue = (i) => ({ id: i.id, kind: i.kind, title: i.title, detail: (i.detail || "").slice(0, 600), taskId: i.taskId, agentId: i.agentId, createdAt: i.createdAt });
 
+const serializeRoutine = (r) => ({
+  id: r.id, title: r.title, prompt: r.prompt, department: r.department,
+  cadenceType: r.cadenceType, everyMinutes: r.everyMinutes, dailyTime: r.dailyTime,
+  runAt: r.runAt, estimateMinutes: r.estimateMinutes, enabled: r.enabled,
+  nextRunAt: r.nextRunAt, lastRunAt: r.lastRunAt, createdBy: r.createdBy,
+});
+
 export function snapshot() {
   return {
     agents: getAgents().map(serializeAgent),
@@ -308,7 +334,78 @@ export function snapshot() {
     documents: state.documents.slice(0, 60).map(serializeDocMeta),
     memory: [...state.memory.values()].map(serializeMemory),
     issues: getIssues().map(serializeIssue),
+    routines: [...state.routines.values()].map(serializeRoutine),
   };
+}
+
+/* ---------- routines (scheduled / recurring tasks) ---------- */
+export const VALID_CADENCE = new Set(["once", "interval", "daily"]);
+export function computeNextRun(r, fromMs) {
+  const from = fromMs || Date.now();
+  if (r.cadenceType === "once") return r.runAt || null;
+  if (r.cadenceType === "interval") return from + Math.max(1, r.everyMinutes || 60) * 60000;
+  if (r.cadenceType === "daily") {
+    const [hh, mm] = String(r.dailyTime || "09:00").split(":").map(Number);
+    const d = new Date(from);
+    let next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hh || 0, mm || 0, 0, 0);
+    if (next <= from) next += 86400000;
+    return next;
+  }
+  return null;
+}
+export const getRoutines = () => [...state.routines.values()];
+export const getRoutine = (id) => state.routines.get(id);
+function persistRoutine(r) {
+  if (!pool) return;
+  pool.query(
+    `INSERT INTO routines (id,title,prompt,department,cadence_type,every_minutes,daily_time,run_at,estimate_minutes,enabled,next_run_at,last_run_at,created_by,created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     ON CONFLICT (id) DO UPDATE SET title=$2,prompt=$3,department=$4,cadence_type=$5,every_minutes=$6,daily_time=$7,run_at=$8,estimate_minutes=$9,enabled=$10,next_run_at=$11,last_run_at=$12`,
+    [r.id, r.title, r.prompt, r.department, r.cadenceType, r.everyMinutes, r.dailyTime,
+     r.runAt ? new Date(r.runAt) : null, r.estimateMinutes, r.enabled,
+     r.nextRunAt ? new Date(r.nextRunAt) : null, r.lastRunAt ? new Date(r.lastRunAt) : null,
+     r.createdBy, new Date(r.createdAt)]
+  ).catch((e) => console.error("[store] persistRoutine", e.message));
+}
+export function createRoutine(input) {
+  const r = {
+    id: randomUUID(), title: String(input.title).slice(0, 120), prompt: String(input.prompt || input.title).slice(0, 4000),
+    department: input.department || null, cadenceType: input.cadenceType, everyMinutes: input.everyMinutes || null,
+    dailyTime: input.dailyTime || null, runAt: input.runAt || null, estimateMinutes: input.estimateMinutes || null,
+    enabled: input.enabled !== false, nextRunAt: null, lastRunAt: null, createdBy: input.createdBy || "user", createdAt: Date.now(),
+  };
+  r.nextRunAt = r.enabled ? computeNextRun(r) : null;
+  state.routines.set(r.id, r);
+  persistRoutine(r);
+  bus.emit("routine", serializeRoutine(r));
+  return r;
+}
+export function updateRoutine(id, patch) {
+  const r = state.routines.get(id);
+  if (!r) return null;
+  Object.assign(r, patch);
+  if ("enabled" in patch || "cadenceType" in patch || "everyMinutes" in patch || "dailyTime" in patch || "runAt" in patch) {
+    r.nextRunAt = r.enabled ? computeNextRun(r) : null;
+  }
+  persistRoutine(r);
+  bus.emit("routine", serializeRoutine(r));
+  return r;
+}
+export function markRoutineRan(id) {
+  const r = state.routines.get(id);
+  if (!r) return;
+  r.lastRunAt = Date.now();
+  if (r.cadenceType === "once") { r.enabled = false; r.nextRunAt = null; }
+  else r.nextRunAt = computeNextRun(r);
+  persistRoutine(r);
+  bus.emit("routine", serializeRoutine(r));
+}
+export function deleteRoutine(id) {
+  if (!state.routines.has(id)) return false;
+  state.routines.delete(id);
+  if (pool) pool.query("DELETE FROM routines WHERE id=$1", [id]).catch(() => {});
+  bus.emit("routine", { id, deleted: true });
+  return true;
 }
 
 /* ---------- issues (raised to the Group CTO) ---------- */
