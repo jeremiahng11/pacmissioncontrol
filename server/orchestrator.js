@@ -109,6 +109,8 @@ async function runTask(agent, task) {
 function classify(err) {
   const msg = (err && err.message) || String(err);
   if (/429|RESOURCE_EXHAUSTED|quota/i.test(msg)) return { kind: "quota", blocking: true, msg };
+  // Bad/unknown model name or other invalid-argument config — retrying won't help.
+  if (/unexpected model name|INVALID_ARGUMENT|model.*not found|not found.*model|unsupported model/i.test(msg)) return { kind: "config", blocking: true, msg };
   if (/\b40[13]\b|api key|permission|unauthenticat|invalid.*key/i.test(msg)) return { kind: "auth", blocking: true, msg };
   return { kind: "error", blocking: false, msg };
 }
@@ -117,9 +119,13 @@ function handleError(agent, task, err) {
   const c = classify(err);
   if (c.blocking) {
     updateTask(task.id, { status: "blocked", startedAt: null, reviewNotes: c.msg.slice(0, 200) });
-    const title = c.kind === "quota" ? `Gemini quota exceeded (${GEMINI_MODEL})` : `Gemini ${c.kind} error (${GEMINI_MODEL})`;
+    const title = c.kind === "quota" ? `Gemini quota exceeded (${GEMINI_MODEL})`
+      : c.kind === "config" ? `Invalid GEMINI_MODEL: "${GEMINI_MODEL}"`
+      : `Gemini ${c.kind} error (${GEMINI_MODEL})`;
     const hint = c.kind === "quota"
       ? "Set GEMINI_MODEL=gemini-2.5-flash (free tier) or enable billing for Pro."
+      : c.kind === "config"
+      ? "The model name is malformed or unknown. Set GEMINI_MODEL to a valid id — exactly 'gemini-2.5-pro' or 'gemini-2.5-flash' (lowercase, hyphens, no quotes or spaces)."
       : "Check GEMINI_API_KEY and that the model is enabled for your project.";
     createIssue({ kind: c.kind, title, detail: `${hint}\n\n${c.msg.slice(0, 400)}`, taskId: task.id, agentId: agent.id });
     addEvent({ kind: "issue", text: `⚠️ ${c.kind} issue — ${agent.name} blocked on "${task.title}"`, agentId: agent.id, taskId: task.id });

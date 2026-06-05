@@ -333,7 +333,7 @@ function MemoryView({ memory, onDelete }) {
 }
 
 function IssuesView({ issues, byId, onResolve, onRetry, onClearAll }) {
-  const KIND = { quota: ["QUOTA", "#fb923c"], auth: ["AUTH", "#fb5570"], review: ["REVIEW", "#eab308"], error: ["ERROR", "#fb5570"] };
+  const KIND = { quota: ["QUOTA", "#fb923c"], auth: ["AUTH", "#fb5570"], config: ["CONFIG", "#fb5570"], review: ["REVIEW", "#eab308"], error: ["ERROR", "#fb5570"] };
   return (
     <div style={SS.libWrap}>
       <div style={SS.head}>
