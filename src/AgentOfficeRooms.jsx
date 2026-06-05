@@ -548,7 +548,7 @@ export default function AgentOffice() {
               <h1 style={SS.h1}><Gamepad2 size={20} /> CTO Agent Office {settings.paused && <span style={SS.pausedChip}>PAUSED</span>}</h1>
               <div style={SS.controls}>
                 <button onClick={() => control("dispatch")} className="mc-btn" style={{ ...SS.btn, ...SS.gold }}><Crown size={12} /> DISPATCH</button>
-                <button onClick={() => control("all_hands")} className="mc-btn" style={{ ...SS.btn, ...SS.go }}><Zap size={12} /> ALL HANDS</button>
+                <button onClick={() => control("all_hands")} className="mc-btn" style={{ ...SS.btn, ...SS.go }}><Zap size={12} /> RESUME</button>
                 <button onClick={() => control("clock_out")} className="mc-btn" style={{ ...SS.btn, ...SS.stop }}><Power size={12} /> CLOCK OUT</button>
                 <button onClick={() => control("toggle_autonomous", { autonomous: !settings.autonomous })} className="mc-btn" style={{ ...SS.btn, ...(settings.autonomous ? SS.autoOn : SS.autoOff) }}><Bot size={12} /> AUTO {settings.autonomous ? "ON" : "OFF"}</button>
               </div>

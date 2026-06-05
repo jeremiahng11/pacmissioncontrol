@@ -187,8 +187,9 @@ export function clockOut() {
   addEvent({ kind: "system", text: "Jay Jay: clock out — workers standing down" });
 }
 export function allHands() {
+  // Resume the office (the opposite of CLOCK OUT). Does NOT touch AUTO — the
+  // demo is controlled only by the AUTO toggle.
   settings.paused = false;
-  settings.autonomous = true;
   bus.emit("settings", getSettings());
   addEvent({ kind: "system", text: "Jay Jay: all hands — back to work" });
   return tick();
