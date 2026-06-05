@@ -216,14 +216,14 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
 });
 
 /* --- one room (memoized on primitive props -> no flicker on unrelated updates) --- */
-const Room = memo(function Room({ room, name, color, cto, status, task, department, cls, h, walk, sayHere, ctoAway, onPick }) {
+const Room = memo(function Room({ room, name, color, cto, status, task, department, cls, h, walk, sayText, ctoAway, onPick }) {
   const busy = status === "working" || status === "command";
   return (
     <div data-room={room} className={`room ${cls}`} style={{ "--rc": color }} onClick={() => !cto && onPick(department)}>
       <div className="room-top"><span className="room-name">{roomLabel(room)}</span><span className="room-dots"><i /><i /><i /></span></div>
       <div className="scene" style={{ height: h }}>
         <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={color} work={busy} /></svg>
-        {sayHere && !cto && <div className="speech" style={{ borderColor: color, color }}>on it!</div>}
+        {sayText && !cto && <div className="speech" style={{ borderColor: color, color }}>{sayText}</div>}
         {status === "thinking" && <div className="cue" style={{ color }}>?</div>}
         {status === "idle" && <div className="cue zzz">z z z</div>}
         <div className={`walker ${busy && !ctoAway ? "busy " + walk : ""}`}>
@@ -502,7 +502,7 @@ export default function AgentOffice() {
     const T = timersRef.current;
     const goingLeft = tgt.x < hq.x; // face the direction of travel
     setCourier({ ...item, coords: hq, showSpeech: false, facing: goingLeft ? "left" : "right" });
-    setSay({ room: item.room });
+    setSay({ room: item.room, text: "on it!" });
     T.push(setTimeout(() => setCourier((c) => c && { ...c, coords: tgt }), 90));
     T.push(setTimeout(() => setCourier((c) => c && { ...c, showSpeech: true }), 1350));
     T.push(setTimeout(() => { setCourier((c) => c && { ...c, showSpeech: false, coords: hq, facing: goingLeft ? "right" : "left" }); setSay((s) => (s && s.room === item.room ? null : s)); }, 2800));
@@ -529,6 +529,21 @@ export default function AgentOffice() {
   }, [events]);
 
   useEffect(() => { if (view === "visual") runQueue(); }, [view]);
+
+  // Completion bubble: when an agent finishes, it tells Jay Jay "done!".
+  const doneEvtRef = useRef(0);
+  useEffect(() => {
+    const dones = events.filter((e) => e.kind === "done" && e.agentId);
+    if (!dones.length) return;
+    const maxId = Math.max(...dones.map((e) => e.id));
+    if (doneEvtRef.current === 0) { doneEvtRef.current = maxId; return; } // skip history
+    const fresh = dones.find((e) => e.id > doneEvtRef.current);
+    doneEvtRef.current = maxId;
+    if (fresh) {
+      const ag = AGENTS.find((a) => a.id === fresh.agentId);
+      if (ag && !ag.cto) { setSay({ room: ag.room, text: "done! ✓" }); const id = setTimeout(() => setSay((s) => (s && s.text === "done! ✓" ? null : s)), 2200); return () => clearTimeout(id); }
+    }
+  }, [events]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -643,7 +658,7 @@ export default function AgentOffice() {
                 return (
                   <Room key={room} room={room} name={a.name} color={a.color} cto={!!a.cto} status={a.status} task={a.task}
                     department={a.department} cls={m.cls} h={m.h} walk={m.walk}
-                    sayHere={say?.room === room} ctoAway={a.cto && ctoAway} onPick={onPick} />
+                    sayText={say?.room === room ? say.text : null} ctoAway={a.cto && ctoAway} onPick={onPick} />
                 );
               })}
               {courier && (

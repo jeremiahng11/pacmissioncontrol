@@ -28,6 +28,11 @@ export function setSetting(key, value) {
   bus.emit("settings", getSettings());
 }
 
+const deptAgentBusy = (dept) => {
+  const w = getWorkers().find((a) => a.department === dept);
+  return w ? busy.has(w.id) : false;
+};
+
 function nextTaskFor(agent) {
   const queued = getTasks().filter((t) => t.status === "queued");
   const byAge = (a, b) => a.createdAt - b.createdAt;
@@ -36,6 +41,11 @@ function nextTaskFor(agent) {
     pool = queued.filter((t) => !t.assignedTo && t.department === agent.department).sort(byAge);
   if (!pool.length)
     pool = queued.filter((t) => !t.assignedTo && !t.department).sort(byAge);
+  // Overflow assist: a free worker helps another department whose own agent is
+  // busy. Security is excluded both ways — Warden never leaves security duty,
+  // and security tasks are only ever done by Warden.
+  if (!pool.length && agent.department !== "security")
+    pool = queued.filter((t) => !t.assignedTo && t.department && t.department !== "security" && t.department !== agent.department && deptAgentBusy(t.department)).sort(byAge);
   return pool[0] || null;
 }
 
