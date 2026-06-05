@@ -466,7 +466,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -479,6 +479,7 @@ export default function AgentOffice() {
   const [files, setFiles] = useState([]);
   const [credForm, setCredForm] = useState({ name: "", value: "" });
   const [followText, setFollowText] = useState("");
+  const [mission, setMission] = useState({ name: "", department: "", tasks: "" });
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -736,6 +737,15 @@ export default function AgentOffice() {
                 <div style={SS.secTitle}>ASSIGN A TASK</div>
                 {composer}
                 <div style={SS.composeHint}>Pick a department (or “Any”) and Jay Jay routes it to the right agent.</div>
+                <div style={{ borderTop: "1px solid #1a2440", margin: "6px 0 2px" }} />
+                <div style={SS.secTitle}>LAUNCH A MISSION</div>
+                <input style={SS.input} placeholder="Mission name (e.g. Launch v2)" value={mission.name} onChange={(e) => setMission((m) => ({ ...m, name: e.target.value }))} />
+                <select style={SS.select} value={mission.department} onChange={(e) => setMission((m) => ({ ...m, department: e.target.value }))}>
+                  {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <textarea style={SS.textarea} rows={5} placeholder={"One task per line, e.g.\nResearch competitors\nDraft the brief\nBuild the landing page"} value={mission.tasks} onChange={(e) => setMission((m) => ({ ...m, tasks: e.target.value }))} />
+                <button style={SS.assignBtn} onClick={() => { const lines = mission.tasks.split("\n").map((s) => s.trim()).filter(Boolean); if (!lines.length) return; createMission({ name: mission.name.trim(), department: mission.department || null, tasks: lines }); setMission((m) => ({ ...m, name: "", tasks: "" })); }}><Plus size={13} /> LAUNCH MISSION</button>
+                <div style={SS.composeHint}>One task per line. Jay Jay assigns them and works through the list in order.</div>
               </div>
               <div style={SS.tasksList}>
                 <div style={SS.tasksListHead}>
@@ -763,6 +773,7 @@ export default function AgentOffice() {
                       <div key={t.id} style={SS.taskRow} onClick={() => setSelected(t.id)}>
                         <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
                         <span style={{ ...SS.srcBadge, color: sc, borderColor: `${sc}66`, background: `${sc}1a` }}>{sl}</span>
+                        {t.mission && <span style={SS.missionTag}>◇ {t.mission}</span>}
                         <span style={SS.taskRowTitle}>{t.title}</span>
                         {t.assignedTo && byId[t.assignedTo] && <span style={SS.taskRowWho}>{byId[t.assignedTo].name}</span>}
                       </div>
@@ -964,6 +975,7 @@ const SS = {
   taskRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440", cursor: "pointer" },
   taskRowTitle: { fontSize: 12, color: "#e8edff", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   taskRowWho: { fontSize: 9, color: "#8aa0c0", letterSpacing: 0.5 },
+  missionTag: { fontSize: 8.5, color: "#c4b5fd", background: "rgba(168,85,247,.12)", border: "1px solid rgba(168,85,247,.4)", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
   routineRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440" },
   routineTitle: { fontSize: 12.5, fontWeight: 700, color: "#e8edff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   routineMeta: { fontSize: 10, color: "#8aa0c0", marginTop: 2 },
@@ -1033,8 +1045,8 @@ const SS = {
   modalClose: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer" },
   modalTitle: { fontSize: 17, fontWeight: 800, color: "#e8edff", margin: "10px 0 4px" },
   modalMeta: { fontSize: 10.5, color: "#5e7088", marginBottom: 12, letterSpacing: .4 },
-  modalPrompt: { fontSize: 12, color: "#9db0c8", background: "#070a14", border: "1px solid #161f3a", borderRadius: 8, padding: 10, marginBottom: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 },
-  resultBox: { fontSize: 12.5, color: "#cfe3d8", background: "#070a14", border: "1px solid #1a2440", borderRadius: 8, padding: 12, whiteSpace: "pre-wrap", lineHeight: 1.55, marginTop: 4 },
+  modalPrompt: { fontSize: 12, color: "#9db0c8", background: "#070a14", border: "1px solid #161f3a", borderRadius: 8, padding: 10, marginBottom: 14, whiteSpace: "pre-wrap", lineHeight: 1.5, maxHeight: "22vh", overflowY: "auto" },
+  resultBox: { fontSize: 12.5, color: "#cfe3d8", background: "#070a14", border: "1px solid #1a2440", borderRadius: 8, padding: 12, whiteSpace: "pre-wrap", lineHeight: 1.55, marginTop: 4, maxHeight: "40vh", overflowY: "auto" },
   reviewNote: { fontSize: 11, color: "#bbf7d0", marginTop: 10 },
   failReason: { display: "flex", gap: 8, fontSize: 11.5, color: "#fcd9b6", background: "rgba(251,146,60,.1)", border: "1px solid rgba(251,146,60,.35)", borderRadius: 8, padding: "9px 11px", margin: "10px 0 4px", lineHeight: 1.45 },
   continueBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(74,222,128,.45)", background: "rgba(74,222,128,.12)", color: "#bbf7d0", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },

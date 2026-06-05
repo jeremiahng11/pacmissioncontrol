@@ -126,6 +126,17 @@ app.get("/api/attachments/:id", (req, reply) => {
     .send(Buffer.from(a.data, "base64"));
 });
 
+app.post("/api/missions", (req, reply) => {
+  const b = req.body || {};
+  const name = String(b.name || "").trim();
+  const dept = b.department && VALID_DEPARTMENTS.has(b.department) ? b.department : null;
+  const lines = (Array.isArray(b.tasks) ? b.tasks : String(b.tasks || "").split("\n"))
+    .map((s) => String(s).trim()).filter(Boolean).slice(0, 50);
+  if (!lines.length) return reply.code(400).send({ error: "no tasks" });
+  const created = lines.map((title) => createTask({ title, prompt: title, department: dept, createdBy: "user", mission: name || null }));
+  reply.code(201).send({ count: created.length });
+});
+
 app.get("/api/tasks/:id", (req, reply) => {
   const t = getTask(req.params.id);
   if (!t) return reply.code(404).send({ error: "not found" });
