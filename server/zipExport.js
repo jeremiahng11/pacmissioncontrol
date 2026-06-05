@@ -54,3 +54,30 @@ export async function buildZip(files, title, fullMarkdown) {
 }
 
 export const hasCode = (md) => /```/.test(md || "");
+
+// All fenced code blocks (used when there are no explicit filenames).
+export function extractCodeBlocks(md) {
+  const re = /```([^\n]*)\n([\s\S]*?)```/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(md || ""))) out.push({ lang: String(m[1] || "").trim().toLowerCase().split(/\s+/)[0], content: m[2].replace(/\n$/, "") });
+  return out;
+}
+
+const LANG_EXT = {
+  html: "html", htm: "html", js: "js", javascript: "js", jsx: "jsx", ts: "ts", typescript: "ts", tsx: "tsx",
+  py: "py", python: "py", dart: "dart", json: "json", css: "css", scss: "scss", java: "java", go: "go", golang: "go",
+  rb: "rb", ruby: "rb", php: "php", yaml: "yml", yml: "yml", sh: "sh", bash: "sh", shell: "sh", sql: "sql",
+  xml: "xml", md: "md", markdown: "md", c: "c", cpp: "cpp", "c++": "cpp", cs: "cs", csharp: "cs", rs: "rs",
+  rust: "rs", kt: "kt", kotlin: "kt", swift: "swift", vue: "vue", svelte: "svelte", toml: "toml", dockerfile: "dockerfile",
+  text: "txt", txt: "txt",
+};
+export const langExt = (lang) => LANG_EXT[lang] || "txt";
+
+const MIME = {
+  html: "text/html", css: "text/css", js: "text/javascript", jsx: "text/javascript", ts: "text/typescript",
+  json: "application/json", xml: "application/xml", svg: "image/svg+xml", md: "text/markdown",
+};
+export const mimeForExt = (ext) => MIME[ext] || "text/plain; charset=utf-8";
+export const baseName = (p) => String(p).split(/[/\\]/).pop() || "file.txt";
+export const extOf = (name) => (String(name).split(".").pop() || "txt").toLowerCase();

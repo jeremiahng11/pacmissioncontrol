@@ -463,7 +463,7 @@ export default function AgentOffice() {
     a.remove();
   };
   const downloadDoc = (id) => downloadFrom(`/api/documents/${id}/download`);
-  const downloadZip = (id) => downloadFrom(`/api/documents/${id}/zip`);
+  const downloadCode = (id) => downloadFrom(`/api/documents/${id}/code`);
 
   const roomsRef = useRef(null);
   const queueRef = useRef([]);
@@ -812,7 +812,12 @@ export default function AgentOffice() {
             )}
             <div style={SS.modalActions}>
               {["failed", "blocked"].includes(selectedTask.status) && <button style={SS.continueBtn} onClick={() => retryTask(selectedTask.id).then(() => alert("Jay Jay is re-dispatching this task — watch the Visual office. If it blocks again, it's the Gemini quota/model.")).catch((e) => alert("Couldn't continue: " + e.message + (/not found/i.test(e.message) ? " (the task no longer exists — re-assign it fresh)" : "")))}><RotateCw size={13} /> CONTINUE TASK</button>}
-              {(() => { const td = documents.find((d) => d.taskId === selectedTask.id); return td ? <button style={SS.downloadBtn} onClick={() => downloadDoc(td.id)}><Download size={13} /> DOWNLOAD .DOC</button> : null; })()}
+              {(() => {
+                const td = documents.find((d) => d.taskId === selectedTask.id);
+                if (!td) return null;
+                const isDev = selectedTask.department === "development";
+                return <button style={SS.downloadBtn} onClick={() => (isDev ? downloadCode(td.id) : downloadDoc(td.id))}><Download size={13} /> {isDev ? "DOWNLOAD CODE" : "DOWNLOAD .DOC"}</button>;
+              })()}
               <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
             </div>
           </div>
@@ -834,8 +839,8 @@ export default function AgentOffice() {
             <div style={SS.secTitle}>OUTPUT</div>
             <div style={SS.resultBox}>{doc.content}</div>
             <div style={SS.modalActions}>
-              <button style={SS.downloadBtn} onClick={() => downloadDoc(doc.id)}><Download size={13} /> DOWNLOAD .DOC</button>
-              {/```/.test(doc.content || "") && <button style={SS.downloadBtn} onClick={() => downloadZip(doc.id)}><Download size={13} /> DOWNLOAD .ZIP</button>}
+              {/```/.test(doc.content || "") && <button style={SS.downloadBtn} onClick={() => downloadCode(doc.id)}><Download size={13} /> DOWNLOAD CODE</button>}
+              <button style={/```/.test(doc.content || "") ? SS.ghostBtn : SS.downloadBtn} onClick={() => downloadDoc(doc.id)}><Download size={13} /> .DOC</button>
               <button style={SS.delBtn} onClick={() => { if (confirm("Delete this document?")) { deleteDocument(doc.id); setDoc(null); } }}><Trash2 size={13} /> DELETE</button>
             </div>
           </div>
@@ -989,6 +994,7 @@ const SS = {
   continueBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(74,222,128,.45)", background: "rgba(74,222,128,.12)", color: "#bbf7d0", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   modalActions: { display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" },
   downloadBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  ghostBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #243358", background: "transparent", color: "#9db0c8", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   delBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 11px", borderRadius: 8, border: "1px solid rgba(251,85,112,.4)", background: "rgba(251,85,112,.1)", color: "#fca5b5", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   bannerClose: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 2, display: "flex", flexShrink: 0 },
 };

@@ -28,7 +28,7 @@ import {
   verifyCredentials, setSession, clearSession, isAuthed, isAuthedFromHeader, loginPage,
 } from "./auth.js";
 import { toWordDoc, safeFilename } from "./wordExport.js";
-import { extractFiles, buildZip } from "./zipExport.js";
+import { extractFiles, buildZip, extractCodeBlocks, langExt, mimeForExt, baseName, extOf } from "./zipExport.js";
 import { DEPARTMENTS } from "./agents.js";
 import { getAgent } from "./store.js";
 import { usingGemini } from "./gemini.js";
@@ -168,6 +168,27 @@ app.get("/api/documents/:id/zip", async (req, reply) => {
   const buf = await buildZip(files, d.title, d.content);
   const name = safeFilename(d.title).replace(/\.doc$/, "");
   reply.header("Content-Type", "application/zip").header("Content-Disposition", `attachment; filename="${name}.zip"`).send(buf);
+});
+
+// Smart code download: single file -> its real extension (.html/.py/.dart/...);
+// multiple files -> .zip.
+app.get("/api/documents/:id/code", async (req, reply) => {
+  const d = getDocument(req.params.id);
+  if (!d) return reply.code(404).send({ error: "not found" });
+  const base = safeFilename(d.title).replace(/\.doc$/, "");
+  const sendFileOut = (filename, content) =>
+    reply.header("Content-Type", mimeForExt(extOf(filename))).header("Content-Disposition", `attachment; filename="${filename}"`).send(content);
+  const sendZipOut = async (files) =>
+    reply.header("Content-Type", "application/zip").header("Content-Disposition", `attachment; filename="${base}.zip"`).send(await buildZip(files, d.title, d.content));
+
+  const named = extractFiles(d.content || "");
+  if (named.length >= 2) return sendZipOut(named);
+  if (named.length === 1) return sendFileOut(baseName(named[0].path), named[0].content);
+
+  const blocks = extractCodeBlocks(d.content || "");
+  if (blocks.length >= 2) return sendZipOut(blocks.map((b, i) => ({ path: `${base}-${i + 1}.${langExt(b.lang)}`, content: b.content })));
+  if (blocks.length === 1) return sendFileOut(`${base}.${langExt(blocks[0].lang)}`, blocks[0].content);
+  return sendFileOut(`${base}.txt`, d.content || "");
 });
 
 app.delete("/api/documents/:id", (req, reply) => {
