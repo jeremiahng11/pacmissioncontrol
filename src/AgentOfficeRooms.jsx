@@ -1,32 +1,32 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2, Crown, Zap, Power } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Gamepad2, Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles } from "lucide-react";
+import { useAgentSocket } from "./useAgentSocket";
 
 /* ------------------------------------------------------------------ *
- *  MISSION CONTROL — AGENT OFFICE (furnished rooms)
- *  Each agent has a themed room with furniture + a perspective floor.
- *  When working, the octopus walks the room visiting stations; idle =
- *  asleep in place; thinking = pacing with a "?". Jeremiah = CTO.
+ *  MISSION CONTROL — AGENT OFFICE
+ *  Live version: every agent renders purely from {status, task} pushed
+ *  over the WebSocket. Jeremiah (CTO) assigns tasks to the department's
+ *  agent, watches Gemini Flash do the work, verifies, and reassigns.
  * ------------------------------------------------------------------ */
 
 const AGENTS = [
-  { id: "jeremiah", name: "JEREMIAH", role: "CTO · Command Core", room: "COMMAND HQ",  color: "#a855f7", cto: true },
-  { id: "scout",    name: "SCOUT",    role: "Researcher",         room: "OBSERVATORY",  color: "#38bdf8" },
-  { id: "warden",   name: "WARDEN",   role: "Sentinel",           room: "SECURITY",     color: "#fb5570" },
-  { id: "scribe",   name: "SCRIBE",   role: "Writer",             room: "RESEARCH LAB", color: "#f472b6" },
-  { id: "orbit",    name: "ORBIT",    role: "Engineer",           room: "WORKSHOP",     color: "#eab308" },
-  { id: "vault",    name: "VAULT",    role: "Data",               room: "ARCHIVE",      color: "#fb923c" },
+  { id: "jeremiah", name: "JEREMIAH", role: "CTO · Command Core", room: "COMMAND HQ",  department: "command",     color: "#a855f7", cto: true },
+  { id: "scout",    name: "SCOUT",    role: "Researcher",         room: "OBSERVATORY",  department: "observatory", color: "#38bdf8" },
+  { id: "warden",   name: "WARDEN",   role: "Sentinel",           room: "SECURITY",     department: "security",    color: "#fb5570" },
+  { id: "scribe",   name: "SCRIBE",   role: "Writer",             room: "RESEARCH LAB", department: "research_lab",color: "#f472b6" },
+  { id: "orbit",    name: "ORBIT",    role: "Engineer",           room: "WORKSHOP",     department: "development", color: "#eab308" },
+  { id: "vault",    name: "VAULT",    role: "Data",               room: "ARCHIVE",      department: "admin",       color: "#fb923c" },
 ];
-const ORDERS = {
-  scout:  ["scan the skies", "chart a comet", "log the readings"],
-  warden: ["sweep the perimeter", "lock the vault", "run a scan"],
-  scribe: ["draft the report", "polish the notes", "file the brief"],
-  orbit:  ["patch the engine", "tune the rig", "fix the build"],
-  vault:  ["index the logs", "back up the core", "sort the archive"],
-};
-const STATES = ["idle", "thinking", "working"];
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
-const NAV = [["Tasks", Target], ["Content", Satellite], ["Calendar", Calendar], ["Projects", Rocket], ["Memory", Brain], ["Docs", FileText], ["Team", Users], ["Visual", Gamepad2]];
+const DEPT_OPTS = [
+  ["", "Any department"],
+  ["observatory", "Observatory · Scout"],
+  ["security", "Security · Warden"],
+  ["research_lab", "Research Lab · Scribe"],
+  ["development", "Development · Orbit"],
+  ["admin", "Admin · Vault"],
+];
+
 const ROOMS = ["OBSERVATORY", "COMMAND HQ", "SECURITY", "RESEARCH LAB", "WORKSHOP", "ARCHIVE"];
 const META = {
   "OBSERVATORY":  { cls: "r-obs",  h: 172, walk: "busyA" },
@@ -36,6 +36,9 @@ const META = {
   "WORKSHOP":     { cls: "r-shop", h: 150, walk: "busyB" },
   "ARCHIVE":      { cls: "r-arc",  h: 172, walk: "busyA" },
 };
+
+const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570" };
+const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED" };
 
 /* --- pixel octopus sprite --- */
 const OCTO = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XX.XXX.XXX.XX", "X..X.X.X.X..X"];
@@ -130,57 +133,93 @@ function RoomArt({ room, color, work }) {
 }
 
 export default function AgentOffice() {
-  const [agents, setAgents] = useState(() => AGENTS.map((a) => ({ ...a, status: a.cto ? "command" : "idle", task: a.cto ? "running the office" : "standing by", last: pick(["1h ago", "2h ago", "5h ago", "12h ago"]), next: pick(["in 6h", "in 12h", "in 21h", "on demand"]) })));
-  const [ticker, setTicker] = useState(["Scout: OK", "Warden: standby", "Jeremiah: ON-DUTY"]);
+  const { agents: live, tasks, events, settings, gemini, connected, assignTask, deleteTask, control, logout } = useAgentSocket();
+  const [form, setForm] = useState({ title: "", department: "", details: "" });
+  const [selected, setSelected] = useState(null);
   const [say, setSay] = useState(null);
-  const agentsRef = useRef(agents);
-  useEffect(() => { agentsRef.current = agents; }, [agents]);
 
-  const dispatch = (forcedId) => {
-    const list = agentsRef.current.filter((a) => !a.cto);
-    const idlers = list.filter((a) => a.status === "idle");
-    const target = forcedId ? list.find((a) => a.id === forcedId) : pick(idlers.length ? idlers : list);
-    if (!target) return;
-    const order = pick(ORDERS[target.id]);
-    const roll = Math.random();
-    const status = roll < 0.76 ? "working" : roll < 0.93 ? "thinking" : "idle";
-    setSay({ room: target.room, name: target.name }); setTimeout(() => setSay(null), 1900);
-    setTicker((t) => [`Jeremiah → ${target.name}: ${order}`, ...t].slice(0, 8));
-    setAgents((p) => p.map((a) => a.id === target.id ? { ...a, status, task: status === "idle" ? "standing by" : order, last: "just now" } : a));
-  };
-  useEffect(() => { const id = setInterval(() => dispatch(), 2600); return () => clearInterval(id); }, []);
-
-  const cycle = (id) => setAgents((p) => p.map((a) => {
-    if (a.id !== id || a.cto) return a;
-    const s = STATES[(STATES.indexOf(a.status) + 1) % 3];
-    return { ...a, status: s, task: s === "idle" ? "standing by" : pick(ORDERS[a.id]), last: "just now" };
+  const agents = AGENTS.map((s) => ({
+    ...s,
+    ...(live[s.id] || { status: s.cto ? "command" : "idle", task: s.cto ? "running the office" : "standing by", last: "" }),
   }));
-  const all = (s) => () => setAgents((p) => p.map((a) => a.cto ? a : ({ ...a, status: s, task: s === "idle" ? "standing by" : pick(ORDERS[a.id]) })));
-
+  const byId = Object.fromEntries(agents.map((a) => [a.id, a]));
   const byRoom = (room) => agents.find((a) => a.room === room);
+
+  const taskList = Object.values(tasks).sort((a, b) => b.createdAt - a.createdAt);
+  const active = taskList.filter((t) => ["queued", "in_progress", "review"].includes(t.status));
+  const selectedTask = selected ? tasks[selected] : null;
+
+  // Speech bubble when Jeremiah assigns work.
+  useEffect(() => {
+    const e = events[0];
+    if (e && e.kind === "assign" && e.agentId) {
+      const a = AGENTS.find((x) => x.id === e.agentId);
+      if (a) { setSay({ room: a.room, name: a.name }); const id = setTimeout(() => setSay(null), 1900); return () => clearTimeout(id); }
+    }
+  }, [events]);
+
+  const submit = (e) => {
+    e.preventDefault();
+    const title = form.title.trim();
+    if (!title) return;
+    assignTask({ title, prompt: form.details.trim() || title, department: form.department || null });
+    setForm((f) => ({ ...f, title: "", details: "" }));
+  };
+
   const badge = (s) => s === "command" ? ["ON-DUTY", "#a855f7"] : s === "working" ? ["ACTIVE", "#4ade80"] : s === "thinking" ? ["THINKING", "#eab308"] : ["IDLE", "#64786d"];
+  const ticker = events.length ? events.map((e) => e.text) : ["Mission Control — connecting…"];
 
   return (
     <div style={SS.root}>
       <style>{CSS}</style>
+
       <aside style={SS.side}>
         <div style={SS.brandWrap}>
           <Octo color="#a855f7" size={46} status="command" cto />
           <div style={SS.brand}>MISSION<br />CONTROL</div>
-          <div style={SS.online}><span style={SS.onDot} /> JEREMIAH ONLINE</div>
+          <div style={{ ...SS.online, color: connected ? "#4ade80" : "#eab308" }}>
+            <span style={{ ...SS.onDot, background: connected ? "#4ade80" : "#eab308" }} />
+            {connected ? "LIVE" : "RECONNECTING"}
+          </div>
+          <div style={SS.modePill}>
+            {gemini ? <Sparkles size={11} /> : <Bot size={11} />} {gemini ? "GEMINI FLASH" : "SIMULATION"}
+          </div>
         </div>
-        <nav style={SS.nav}>
-          {NAV.map(([label, Icon]) => (<div key={label} style={{ ...SS.navItem, ...(label === "Visual" ? SS.navActive : {}) }}><Icon size={16} /> <span>{label}</span>{label === "Visual" && <span style={SS.navDot} />}</div>))}
-        </nav>
+
+        <form style={SS.compose} onSubmit={submit}>
+          <div style={SS.secTitle}>ASSIGN A TASK</div>
+          <select style={SS.select} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
+            {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <input style={SS.input} placeholder="Task title…" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+          <textarea style={SS.textarea} rows={3} placeholder="Details / instructions (optional)" value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} />
+          <button type="submit" style={SS.assignBtn}><Plus size={13} /> ADD TO QUEUE</button>
+        </form>
+
+        <div style={SS.queueWrap}>
+          <div style={SS.secTitle}>QUEUE · {active.length} active</div>
+          {taskList.length === 0 && <div style={SS.queueEmpty}>No tasks yet. Add one above, or let Jeremiah run the office.</div>}
+          {taskList.slice(0, 30).map((t) => {
+            const col = STATUS_COLOR[t.status] || "#64786d";
+            return (
+              <div key={t.id} style={SS.queueItem} onClick={() => setSelected(t.id)}>
+                <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
+                <span style={SS.queueTitle}>{t.title}</span>
+              </div>
+            );
+          })}
+        </div>
       </aside>
 
       <main style={SS.main}>
         <div style={SS.head}>
-          <h1 style={SS.h1}><Gamepad2 size={20} /> Agent Office</h1>
+          <h1 style={SS.h1}><Gamepad2 size={20} /> Agent Office {settings.paused && <span style={SS.pausedChip}>PAUSED</span>}</h1>
           <div style={SS.controls}>
-            <button onClick={() => dispatch()} className="mc-btn" style={{ ...SS.btn, ...SS.gold }}><Crown size={12} /> DISPATCH</button>
-            <button onClick={all("working")} className="mc-btn" style={{ ...SS.btn, ...SS.go }}><Zap size={12} /> ALL HANDS</button>
-            <button onClick={all("idle")} className="mc-btn" style={{ ...SS.btn, ...SS.stop }}><Power size={12} /> CLOCK OUT</button>
+            <button onClick={() => control("dispatch")} className="mc-btn" style={{ ...SS.btn, ...SS.gold }}><Crown size={12} /> DISPATCH</button>
+            <button onClick={() => control("all_hands")} className="mc-btn" style={{ ...SS.btn, ...SS.go }}><Zap size={12} /> ALL HANDS</button>
+            <button onClick={() => control("clock_out")} className="mc-btn" style={{ ...SS.btn, ...SS.stop }}><Power size={12} /> CLOCK OUT</button>
+            <button onClick={() => control("toggle_autonomous", { autonomous: !settings.autonomous })} className="mc-btn" style={{ ...SS.btn, ...(settings.autonomous ? SS.autoOn : SS.autoOff) }}><Bot size={12} /> AUTO {settings.autonomous ? "ON" : "OFF"}</button>
+            <button onClick={logout} className="mc-btn" style={{ ...SS.btn, ...SS.ghost }}><LogOut size={12} /> LOGOUT</button>
           </div>
         </div>
 
@@ -189,7 +228,7 @@ export default function AgentOffice() {
             const a = byRoom(room), m = META[room];
             const busy = a.status === "working" || a.status === "command";
             return (
-              <div key={room} className={`room ${m.cls}`} style={{ "--rc": a.color }} onClick={() => cycle(a.id)}>
+              <div key={room} className={`room ${m.cls}`} style={{ "--rc": a.color }} onClick={() => !a.cto && setForm((f) => ({ ...f, department: a.department }))}>
                 <div className="room-top"><span className="room-name">{room}</span><span className="room-dots"><i /><i /><i /></span></div>
                 <div className="scene" style={{ height: m.h }}>
                   <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={a.color} work={busy} /></svg>
@@ -217,7 +256,7 @@ export default function AgentOffice() {
           {agents.map((a) => {
             const [bl, bc] = badge(a.status);
             return (
-              <div key={a.id} style={{ ...SS.card, borderColor: `${a.color}44` }} onClick={() => cycle(a.id)}>
+              <div key={a.id} style={{ ...SS.card, borderColor: `${a.color}44` }} onClick={() => a.currentTaskId && setSelected(a.currentTaskId)}>
                 <div style={SS.cardHead}>
                   <div style={{ width: 36, display: "grid", placeItems: "center" }}><Octo color={a.color} size={28} status={a.status} cto={a.cto} /></div>
                   <div style={{ flex: 1 }}>
@@ -226,12 +265,34 @@ export default function AgentOffice() {
                   </div>
                 </div>
                 <div style={SS.cardBody}>{a.cto ? "always on · runs the office" : a.task}</div>
-                {!a.cto && (<div style={SS.cardMeta}><span>last <b style={{ color: "#cfe3d8" }}>{a.last}</b></span><span>next <b style={{ color: "#cfe3d8" }}>{a.next}</b></span></div>)}
+                {!a.cto && (<div style={SS.cardMeta}><span>last <b style={{ color: "#cfe3d8" }}>{a.last || "—"}</b></span><span>{a.role}</span></div>)}
               </div>
             );
           })}
         </div>
       </main>
+
+      {selectedTask && (
+        <div style={SS.modalBg} onClick={() => setSelected(null)}>
+          <div style={SS.modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={SS.modalHead}>
+              <span style={{ ...SS.pill, color: STATUS_COLOR[selectedTask.status], borderColor: `${STATUS_COLOR[selectedTask.status]}66`, background: `${STATUS_COLOR[selectedTask.status]}1a` }}>{STATUS_LABEL[selectedTask.status]}</span>
+              <button style={SS.modalClose} onClick={() => setSelected(null)}><X size={16} /></button>
+            </div>
+            <div style={SS.modalTitle}>{selectedTask.title}</div>
+            <div style={SS.modalMeta}>
+              {selectedTask.department ? (DEPT_OPTS.find((d) => d[0] === selectedTask.department)?.[1] || selectedTask.department) : "Any department"}
+              {selectedTask.assignedTo && byId[selectedTask.assignedTo] ? ` · ${byId[selectedTask.assignedTo].name}` : ""}
+              {selectedTask.attempts ? ` · attempt ${selectedTask.attempts + 1}` : ""}
+            </div>
+            {selectedTask.prompt && selectedTask.prompt !== selectedTask.title && <div style={SS.modalPrompt}>{selectedTask.prompt}</div>}
+            <div style={SS.secTitle}>DELIVERABLE</div>
+            <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
+            {selectedTask.reviewNotes && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
+            <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -239,24 +300,36 @@ export default function AgentOffice() {
 const PIX = "'Press Start 2P', monospace";
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const SS = {
-  root: { display: "flex", fontFamily: MONO, color: "#cfe3d8", background: "#0a0e1a", borderRadius: 14, overflow: "hidden", border: "1px solid #1a2440" },
-  side: { width: 184, flexShrink: 0, background: "linear-gradient(180deg,#0c1226,#0a0e1a)", borderRight: "1px solid #1a2440", padding: "18px 14px", display: "flex", flexDirection: "column", gap: 18 },
-  brandWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, textAlign: "center", paddingBottom: 14, borderBottom: "1px solid #1a2440" },
+  root: { display: "flex", fontFamily: MONO, color: "#cfe3d8", background: "#0a0e1a", borderRadius: 14, overflow: "hidden", border: "1px solid #1a2440", minHeight: "calc(100vh - 32px)" },
+  side: { width: 248, flexShrink: 0, background: "linear-gradient(180deg,#0c1226,#0a0e1a)", borderRight: "1px solid #1a2440", padding: "18px 14px", display: "flex", flexDirection: "column", gap: 16, maxHeight: "calc(100vh - 32px)" },
+  brandWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7, textAlign: "center", paddingBottom: 14, borderBottom: "1px solid #1a2440" },
   brand: { fontFamily: PIX, fontSize: 12, lineHeight: 1.6, color: "#e8edff", letterSpacing: 1 },
-  online: { fontSize: 9.5, color: "#4ade80", display: "flex", alignItems: "center", gap: 5, letterSpacing: 1 },
-  onDot: { width: 7, height: 7, borderRadius: 99, background: "#4ade80", boxShadow: "0 0 6px #4ade80" },
-  nav: { display: "flex", flexDirection: "column", gap: 3 },
-  navItem: { display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 9, fontSize: 13, color: "#8aa0c0", cursor: "pointer", position: "relative" },
-  navActive: { background: "#15203f", color: "#e8edff", border: "1px solid #243358" },
-  navDot: { position: "absolute", right: 12, width: 7, height: 7, borderRadius: 99, background: "#4ade80" },
-  main: { flex: 1, minWidth: 0, padding: 18, background: "radial-gradient(120% 90% at 50% -10%, #0e1430, #0a0e1a 60%)" },
+  online: { fontSize: 9.5, display: "flex", alignItems: "center", gap: 5, letterSpacing: 1 },
+  onDot: { width: 7, height: 7, borderRadius: 99, boxShadow: "0 0 6px currentColor" },
+  modePill: { fontSize: 8.5, letterSpacing: 1, color: "#9db0c8", display: "flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 99, border: "1px solid #243358", background: "#0a1020" },
+  compose: { display: "flex", flexDirection: "column", gap: 7 },
+  secTitle: { fontSize: 9, letterSpacing: 1.5, color: "#5e7088", fontWeight: 700, margin: "2px 0" },
+  select: { padding: "8px 9px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11 },
+  input: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 12 },
+  textarea: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11, resize: "vertical" },
+  assignBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px", borderRadius: 7, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  queueWrap: { display: "flex", flexDirection: "column", gap: 5, overflowY: "auto", flex: 1, minHeight: 60 },
+  queueEmpty: { fontSize: 10, color: "#5e7088", lineHeight: 1.5, padding: "4px 2px" },
+  queueItem: { display: "flex", alignItems: "center", gap: 7, padding: "7px 8px", borderRadius: 7, background: "#0a1020", border: "1px solid #161f3a", cursor: "pointer" },
+  queueTitle: { fontSize: 10.5, color: "#cfe3d8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  pill: { fontSize: 7.5, fontWeight: 700, padding: "2px 6px", borderRadius: 99, border: "1px solid", letterSpacing: 0.8, flexShrink: 0 },
+  main: { flex: 1, minWidth: 0, padding: 18, background: "radial-gradient(120% 90% at 50% -10%, #0e1430, #0a0e1a 60%)", overflowY: "auto", maxHeight: "calc(100vh - 32px)" },
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
+  pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },
-  btn: { display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: .5, padding: "8px 11px", borderRadius: 8, cursor: "pointer", fontFamily: MONO },
-  gold: { color: "#1a1405", background: "#f5c95b", border: "1px solid #f5c95b" },
-  go: { color: "#bbf7d0", background: "rgba(74,222,128,.1)", border: "1px solid rgba(74,222,128,.4)" },
-  stop: { color: "#fca5b5", background: "rgba(251,85,112,.1)", border: "1px solid rgba(251,85,112,.4)" },
+  btn: { display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: .5, padding: "8px 11px", borderRadius: 8, cursor: "pointer", fontFamily: MONO, border: "1px solid" },
+  gold: { color: "#1a1405", background: "#f5c95b", borderColor: "#f5c95b" },
+  go: { color: "#bbf7d0", background: "rgba(74,222,128,.1)", borderColor: "rgba(74,222,128,.4)" },
+  stop: { color: "#fca5b5", background: "rgba(251,85,112,.1)", borderColor: "rgba(251,85,112,.4)" },
+  autoOn: { color: "#c4b5fd", background: "rgba(168,85,247,.12)", borderColor: "rgba(168,85,247,.5)" },
+  autoOff: { color: "#7a8aa0", background: "rgba(120,140,170,.06)", borderColor: "#243358" },
+  ghost: { color: "#9db0c8", background: "transparent", borderColor: "#243358" },
   ticker: { display: "flex", alignItems: "center", gap: 12, marginTop: 14, padding: "9px 12px", borderRadius: 10, background: "#0c1226", border: "1px solid #1a2440", overflow: "hidden" },
   live: { display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, color: "#4ade80", letterSpacing: 1, flexShrink: 0 },
   liveDot: { width: 7, height: 7, borderRadius: 99, background: "#4ade80", boxShadow: "0 0 6px #4ade80" },
@@ -267,8 +340,18 @@ const SS = {
   cardHead: { display: "flex", alignItems: "center", gap: 8 },
   cardName: { fontSize: 13, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 5 },
   cardBadge: { display: "inline-block", marginTop: 4, fontSize: 8, fontWeight: 700, padding: "2px 7px", borderRadius: 99, border: "1px solid", letterSpacing: 1 },
-  cardBody: { fontSize: 11, color: "#9db0c8", marginTop: 9 },
+  cardBody: { fontSize: 11, color: "#9db0c8", marginTop: 9, minHeight: 28 },
   cardMeta: { display: "flex", justifyContent: "space-between", fontSize: 9.5, color: "#5e7088", marginTop: 9, borderTop: "1px solid #1a2440", paddingTop: 8 },
+  modalBg: { position: "fixed", inset: 0, background: "rgba(4,6,13,.72)", display: "grid", placeItems: "center", zIndex: 50, padding: 20 },
+  modalCard: { width: "min(560px,94vw)", maxHeight: "86vh", overflowY: "auto", background: "#0c1226", border: "1px solid #243358", borderRadius: 14, padding: 20 },
+  modalHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  modalClose: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer" },
+  modalTitle: { fontSize: 17, fontWeight: 800, color: "#e8edff", margin: "10px 0 4px" },
+  modalMeta: { fontSize: 10.5, color: "#5e7088", marginBottom: 12, letterSpacing: .4 },
+  modalPrompt: { fontSize: 12, color: "#9db0c8", background: "#070a14", border: "1px solid #161f3a", borderRadius: 8, padding: 10, marginBottom: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 },
+  resultBox: { fontSize: 12.5, color: "#cfe3d8", background: "#070a14", border: "1px solid #1a2440", borderRadius: 8, padding: 12, whiteSpace: "pre-wrap", lineHeight: 1.55, marginTop: 4 },
+  reviewNote: { fontSize: 11, color: "#bbf7d0", marginTop: 10 },
+  delBtn: { display: "flex", alignItems: "center", gap: 6, marginTop: 16, padding: "8px 11px", borderRadius: 8, border: "1px solid rgba(251,85,112,.4)", background: "rgba(251,85,112,.1)", color: "#fca5b5", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
 };
 
 const CSS = `

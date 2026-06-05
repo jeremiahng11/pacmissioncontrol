@@ -12,7 +12,10 @@
       "Read(//Users/jeremiah/.nvm/versions/node/**)",
       "Bash(brew list *)",
       "Read(//usr/local/opt/**)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(kill %1)",
+      "Bash(pkill -f \"node server/index.js\")",
+      "Bash(rm -f /tmp/mc.cookie /tmp/wsclient.mjs /tmp/mc.log)"
     ]
   }
 }
