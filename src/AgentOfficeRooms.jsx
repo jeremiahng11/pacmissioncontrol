@@ -773,7 +773,7 @@ const SS = {
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
-  toastWrap: { position: "fixed", left: 14, bottom: 110, zIndex: 60, display: "flex", flexDirection: "column-reverse", gap: 8, width: 320, maxWidth: "calc(100vw - 28px)" },
+  toastWrap: { position: "fixed", right: 18, bottom: 18, zIndex: 60, display: "flex", flexDirection: "column-reverse", gap: 8, width: 340, maxWidth: "calc(100vw - 36px)" },
   autoBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.12)", border: "1px solid rgba(234,179,8,.4)", borderRadius: 10, padding: "10px 12px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.45)" },
   idleBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#cfe3d8", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 13px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.5)" },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },
