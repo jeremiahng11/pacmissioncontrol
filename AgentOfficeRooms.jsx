@@ -89,13 +89,13 @@ function RoomArt({ room, color, work }) {
         {screen(78, 6, 104, 42, 5)}
         {screen(14, 14, 54, 28, 3)}{screen(192, 14, 54, 28, 3)}
         <rect x="18" y="106" width="224" height="8" rx="2" fill={c} opacity="0.5" />
-        {[34, 96, 158, 210].map((x, i) => screen(x, 90, 40, 16, 2))}
+        {[34, 96, 158, 210].map((x, i) => <g key={i}>{screen(x, 90, 40, 16, 2)}</g>)}
         {["#fb5570", "#eab308", "#4ade80"].map((col, i) => (<circle key={i} cx={236} cy={12 + i * 8} r="2.4" fill={col} className="tw" style={{ animationDelay: `${i * 0.4}s` }} />))}
       </g>);
       break;
     case "SECURITY":
       furn = (<g>
-        {[[16, 10], [60, 10], [104, 10], [16, 40], [60, 40], [104, 40]].map(([x, y], i) => screen(x, y, 38, 24, 2))}
+        {[[16, 10], [60, 10], [104, 10], [16, 40], [60, 40], [104, 40]].map(([x, y], i) => <g key={i}>{screen(x, y, 38, 24, 2)}</g>)}
         {desk(180, 64)}{screen(190, 88, 44, 18, 2)}
         <g><rect x="150" y="86" width="10" height="48" rx="3" fill="#04060d" stroke={c} strokeOpacity="0.5" />{["#fb5570", "#eab308", "#4ade80"].map((col, i) => (<circle key={i} cx="155" cy={94 + i * 12} r="3.4" fill={col} className="tw" style={{ animationDelay: `${i * 0.5}s` }} />))}</g>
       </g>);
@@ -131,7 +131,7 @@ function RoomArt({ room, color, work }) {
 
 export default function AgentOffice() {
   const [agents, setAgents] = useState(() => AGENTS.map((a) => ({ ...a, status: a.cto ? "command" : "idle", task: a.cto ? "running the office" : "standing by", last: pick(["1h ago", "2h ago", "5h ago", "12h ago"]), next: pick(["in 6h", "in 12h", "in 21h", "on demand"]) })));
-  const [ticker, setTicker] = useState(["VE", "Scout: OK", "Warden: standby", "Jeremiah: ON-DUTY"]);
+  const [ticker, setTicker] = useState(["Scout: OK", "Warden: standby", "Jeremiah: ON-DUTY"]);
   const [say, setSay] = useState(null);
   const agentsRef = useRef(agents);
   useEffect(() => { agentsRef.current = agents; }, [agents]);
