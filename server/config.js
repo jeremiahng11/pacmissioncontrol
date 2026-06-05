@@ -13,7 +13,7 @@ export const COOKIE_NAME = "mc_session";
 export const DATABASE_URL = process.env.DATABASE_URL || "";
 
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-pro-preview";
 // No key -> the office still runs, with simulated deliverables.
 export const SIMULATE = !GEMINI_API_KEY;
 
