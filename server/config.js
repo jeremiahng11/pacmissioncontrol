@@ -18,9 +18,10 @@ export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 // if billing is not set up.
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
 
-// Model for the AUTO visual demo. Empty = pure simulation (no API calls, no
-// cost). Set to "gemini-2.5-flash" for real but free-tier demo output.
-export const GEMINI_DEMO_MODEL = process.env.GEMINI_DEMO_MODEL || "";
+// Model for the AUTO visual demo — defaults to free-tier Flash so the demo
+// produces real output at no cost. Set to "" to make AUTO pure simulation
+// (no API calls at all).
+export const GEMINI_DEMO_MODEL = process.env.GEMINI_DEMO_MODEL ?? "gemini-2.5-flash";
 // No key -> the office still runs, with simulated deliverables.
 export const SIMULATE = !GEMINI_API_KEY;
 

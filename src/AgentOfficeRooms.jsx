@@ -382,6 +382,7 @@ export default function AgentOffice() {
   const [courier, setCourier] = useState(null);
   const [taskFilter, setTaskFilter] = useState("all");
   const [idleDismissed, setIdleDismissed] = useState(false);
+  const [autoDismissed, setAutoDismissed] = useState(false);
   const [files, setFiles] = useState([]);
 
   const downloadDoc = (id) => {
@@ -545,18 +546,24 @@ export default function AgentOffice() {
               </div>
             </div>
 
-            {settings.autonomous ? (
-              <div style={SS.autoBanner}>
-                <Bot size={14} /> <b>AUTO is ON — visual demo.</b> {demoModel
-                  ? <>Jay Jay runs demo tasks on <b>{demoModel}</b> (free tier) — no paid Pro calls. Only tasks <b>you</b> assign use {model || "the paid model"}.</>
-                  : <>Demo tasks are simulated — <b>no Gemini calls, costs nothing</b>. Only tasks <b>you</b> assign use the API.</>}
-              </div>
-            ) : activeTasks.length === 0 && !idleDismissed ? (
-              <div style={SS.idleBanner}>
-                <span style={{ flex: 1 }}>Office idle — assign a task in the <b>Tasks</b> tab and Jay Jay will dispatch it (real work, uses the API). Or press <b>AUTO ON</b> for a free visual demo.</span>
-                <button style={SS.bannerClose} onClick={() => setIdleDismissed(true)} title="Dismiss"><X size={14} /></button>
-              </div>
-            ) : null}
+            <div style={SS.toastWrap}>
+              {settings.autonomous && !autoDismissed && (
+                <div style={SS.autoBanner}>
+                  <span style={{ flex: 1 }}>
+                    <Bot size={13} style={{ verticalAlign: -2, marginRight: 5 }} /><b>AUTO is ON — visual demo.</b> {demoModel
+                      ? <>Demo tasks run on <b>{demoModel}</b> (free tier) — no paid Pro calls. Only tasks <b>you</b> assign use {model || "the paid model"}.</>
+                      : <>Demo tasks are simulated — <b>no Gemini calls, costs nothing</b>. Only tasks <b>you</b> assign use the API.</>}
+                  </span>
+                  <button style={SS.bannerClose} onClick={() => setAutoDismissed(true)} title="Dismiss"><X size={14} /></button>
+                </div>
+              )}
+              {!settings.autonomous && activeTasks.length === 0 && !idleDismissed && (
+                <div style={SS.idleBanner}>
+                  <span style={{ flex: 1 }}>Office idle — assign a task in the <b>Tasks</b> tab and Jay Jay will dispatch it (real work, uses the API). Or press <b>AUTO ON</b> for a free visual demo.</span>
+                  <button style={SS.bannerClose} onClick={() => setIdleDismissed(true)} title="Dismiss"><X size={14} /></button>
+                </div>
+              )}
+            </div>
 
             <div className="rooms" ref={roomsRef} style={{ position: "relative" }}>
               {ROOMS.map((room) => {
@@ -760,8 +767,9 @@ const SS = {
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 },
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
-  autoBanner: { display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.08)", border: "1px solid rgba(234,179,8,.35)", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
-  idleBanner: { position: "fixed", bottom: 18, right: 18, zIndex: 40, maxWidth: 360, display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#cfe3d8", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 13px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.5)" },
+  toastWrap: { position: "fixed", top: 18, right: 18, zIndex: 50, display: "flex", flexDirection: "column", gap: 8, width: 360, maxWidth: "calc(100vw - 36px)" },
+  autoBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.12)", border: "1px solid rgba(234,179,8,.4)", borderRadius: 10, padding: "10px 12px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.45)" },
+  idleBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#cfe3d8", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 13px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.5)" },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },
   btn: { display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: .5, padding: "8px 11px", borderRadius: 8, cursor: "pointer", fontFamily: MONO, border: "1px solid" },
   gold: { color: "#1a1405", background: "#f5c95b", borderColor: "#f5c95b" },

@@ -33,6 +33,9 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      # gemini-2.5-pro needs billing enabled; use gemini-2.5-flash otherwise.
+      # Your assigned tasks run on this (needs billing for Pro).
       - key: GEMINI_MODEL
         value: gemini-2.5-pro
+      # AUTO demo runs on free-tier Flash (set to "" for pure simulation).
+      - key: GEMINI_DEMO_MODEL
+        value: gemini-2.5-flash
