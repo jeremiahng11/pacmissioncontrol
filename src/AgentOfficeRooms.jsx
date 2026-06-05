@@ -92,24 +92,26 @@ const roomLabel = (r) => ROOM_LABEL[r] || r;
 const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570", blocked: "#fb923c" };
 const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED", blocked: "ISSUE" };
 
-/* --- Pac-Man sprite for the CTO (Jay Jay) --- */
+/* --- pixel Pac-Man sprite for the CTO (Jay Jay), drawn like the octopus --- */
+const PAC_OPEN = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXX..", "XXXXXXXXX....", "XXXXXX.......", "XXXXXXXXX....", "XXXXXXXXXXX..", "XXXXXXXXXXXXX", ".XXXXXXXXXXX.", "..XXXXXXXXX..", "....XXXXX...."];
+const PAC_CLOSED = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXX.", "XXXXXXXXXX...", "XXXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", ".XXXXXXXXXXX.", "..XXXXXXXXX..", "....XXXXX...."];
+const pacGrid = (rows, color, dim) => rows.map((row, r) => row.split("").map((c, x) => c === "X" ? <rect key={`${r}-${x}`} x={x} y={r} width="1" height="1" fill={color} opacity={dim} /> : null));
 const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "idle" }) {
-  const dur = status === "working" || status === "command" ? "0.34s" : status === "thinking" ? "0.5s" : "0.95s";
-  // Both states keep a clearly-visible mouth so it always reads as Pac-Man.
-  // (sweep-flag 0 draws the body — the circle minus the mouth — not the wedge.)
-  const open = "M50,50 L87.7,23.6 A46,46 0 1 0 87.7,76.4 Z";   // mouth wide (~70deg)
-  const closed = "M50,50 L95.3,42 A46,46 0 1 0 95.3,58 Z";      // mouth narrow (~20deg)
+  const moving = status !== "idle";
+  const dur = status === "working" || status === "command" ? "0.42s" : status === "thinking" ? "0.6s" : "0.9s";
   return (
-    <svg width={size} height={size} viewBox="-8 -18 116 124" shapeRendering="geometricPrecision"
-      style={{ overflow: "visible", display: "block" }}>
-      <g fill="#f5c95b">
-        <rect x="27" y="-14" width="7" height="15" /><rect x="46" y="-17" width="7" height="18" /><rect x="65" y="-14" width="7" height="15" />
-        <rect x="25" y="0" width="50" height="7" rx="1" />
-      </g>
-      <path fill={color} stroke="#00000022" strokeWidth="1" opacity={status === "idle" ? 0.78 : 1}>
-        <animate attributeName="d" dur={dur} repeatCount="indefinite" values={`${open};${closed};${open}`} />
-      </path>
-      <circle cx="45" cy="23" r="5" fill="#0b1020" />
+    <svg width={size} height={size * (16 / 13)} viewBox="0 -3 13 16" shapeRendering="crispEdges"
+      style={{ overflow: "visible", display: "block", filter: status === "idle" ? "none" : `drop-shadow(0 0 5px ${color}66)` }}>
+      <g fill="#f5c95b"><rect x="3" y="-3" width="1" height="2" /><rect x="6" y="-3" width="1" height="2" /><rect x="9" y="-3" width="1" height="2" /><rect x="3" y="-1" width="7" height="1" /></g>
+      {moving ? (
+        <>
+          <g className="pac-a" style={{ animationDuration: dur }}>{pacGrid(PAC_OPEN, color, 1)}</g>
+          <g className="pac-b" style={{ animationDuration: dur }}>{pacGrid(PAC_CLOSED, color, 1)}</g>
+        </>
+      ) : (
+        <g>{pacGrid(PAC_OPEN, color, 0.85)}</g>
+      )}
+      <rect x="7" y="2" width="1.6" height="1.6" fill="#0b1020" />
     </svg>
   );
 });
@@ -912,6 +914,10 @@ const CSS = `
 .cue.zzz { font-size:8px; color:#64786d; letter-spacing:2px; }
 @keyframes cueFloat { 0%,100%{transform:translateX(-50%) translateY(0);opacity:.6;} 50%{transform:translateX(-50%) translateY(-4px);opacity:1;} }
 @keyframes octoBob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
+@keyframes pacChompA { 0%,49.9%{opacity:1;} 50%,100%{opacity:0;} }
+@keyframes pacChompB { 0%,49.9%{opacity:0;} 50%,100%{opacity:1;} }
+.pac-a { animation-name:pacChompA; animation-timing-function:steps(1,end); animation-iteration-count:infinite; }
+.pac-b { animation-name:pacChompB; animation-timing-function:steps(1,end); animation-iteration-count:infinite; }
 .octo-bob { animation:octoBob .55s ease-in-out infinite; }
 @keyframes octoTilt { 0%,100%{transform:rotate(-3deg);} 50%{transform:rotate(3deg);} }
 .octo-tilt { animation:octoTilt 1.8s ease-in-out infinite; }
