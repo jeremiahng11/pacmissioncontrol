@@ -14,11 +14,11 @@ import { useAgentSocket } from "./useAgentSocket";
  * ------------------------------------------------------------------ */
 
 const AGENTS = [
-  { id: "jeremiah", name: "JAY JAY", role: "CTO · Command Core", room: "COMMAND HQ",  department: "command",     color: "#a855f7", cto: true },
+  { id: "jeremiah", name: "JAY JAY", role: "CTO · Command Core", room: "COMMAND HQ",  department: "command",     color: "#facc15", cto: true },
   { id: "scout",    name: "SCOUT",    role: "Researcher",         room: "OBSERVATORY",  department: "observatory", color: "#38bdf8" },
   { id: "warden",   name: "WARDEN",   role: "Sentinel",           room: "SECURITY",     department: "security",    color: "#fb5570" },
   { id: "scribe",   name: "SCRIBE",   role: "Writer",             room: "RESEARCH LAB", department: "research_lab",color: "#f472b6" },
-  { id: "orbit",    name: "ORBIT",    role: "Engineer",           room: "WORKSHOP",     department: "development", color: "#eab308" },
+  { id: "orbit",    name: "ORBIT",    role: "Engineer",           room: "WORKSHOP",     department: "development", color: "#a855f7" },
   { id: "vault",    name: "VAULT",    role: "Data",               room: "ARCHIVE",      department: "admin",       color: "#fb923c" },
 ];
 
@@ -58,7 +58,7 @@ const TEAM = [
       desc: "Sets the direction and priorities, reviews the agents' work, and assigns the missions. The human in command." },
   ]},
   { section: "ORCHESTRATOR", members: [
-    { id: "jeremiah", name: "JAY JAY", role: "CTO · Command Core", color: "#a855f7", cadence: "Always on",
+    { id: "jeremiah", name: "JAY JAY", role: "CTO · Command Core", color: "#facc15", cadence: "Always on",
       desc: "The central brain. Routes every task to the right department, watches the work, verifies completion, and assigns the next." },
   ]},
   { section: "DEPARTMENTS", members: [
@@ -68,7 +68,7 @@ const TEAM = [
       desc: "Assesses risks, reviews for vulnerabilities and compliance gaps, and reports prioritized security findings." },
     { id: "scribe", name: "SCRIBE", role: "Writer · Research Lab",         color: "#f472b6", cadence: "On demand",
       desc: "Produces clear written deliverables — summaries, briefs, and reports." },
-    { id: "orbit",  name: "ORBIT",  role: "Engineer · Development Center", color: "#eab308", cadence: "On demand",
+    { id: "orbit",  name: "ORBIT",  role: "Engineer · Development Center", color: "#a855f7", cadence: "On demand",
       desc: "Designs pragmatic technical solutions and writes clean, correct code." },
     { id: "vault",  name: "VAULT",  role: "Data · Admin",                  color: "#fb923c", cadence: "On demand",
       desc: "Organizes, indexes, reconciles, and summarizes records and structured data." },
@@ -92,9 +92,30 @@ const roomLabel = (r) => ROOM_LABEL[r] || r;
 const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570", blocked: "#fb923c" };
 const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED", blocked: "ISSUE" };
 
+/* --- Pac-Man sprite for the CTO (Jay Jay) --- */
+const PacMan = memo(function PacMan({ color = "#facc15", size = 60, status = "idle" }) {
+  const dur = status === "working" || status === "command" ? "0.34s" : status === "thinking" ? "0.5s" : "0.9s";
+  const open = "M50,50 L89.8,27 A46,46 0 1 1 89.8,73 Z";
+  const closed = "M50,50 L96,48.4 A46,46 0 1 1 96,51.6 Z";
+  return (
+    <svg width={size} height={size} viewBox="-8 -18 116 124" shapeRendering="geometricPrecision"
+      style={{ overflow: "visible", display: "block", filter: status === "idle" ? "none" : `drop-shadow(0 0 6px ${color}aa)` }}>
+      <g fill="#f5c95b">
+        <rect x="27" y="-14" width="7" height="15" /><rect x="46" y="-17" width="7" height="18" /><rect x="65" y="-14" width="7" height="15" />
+        <rect x="25" y="0" width="50" height="7" rx="1" />
+      </g>
+      <path fill={color} opacity={status === "idle" ? 0.7 : 1}>
+        <animate attributeName="d" dur={dur} repeatCount="indefinite" values={`${open};${closed};${open}`} />
+      </path>
+      <circle cx="46" cy="24" r="5" fill="#0b1020" />
+    </svg>
+  );
+});
+
 /* --- pixel octopus sprite (memoized) --- */
 const OCTO = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XXXXXXXXXXXXX", "XX.XXX.XXX.XX", "X..X.X.X.X..X"];
 const Octo = memo(function Octo({ color, size = 60, status = "idle", cto = false }) {
+  if (cto) return <PacMan color={color} size={size} status={status} />;
   const work = status === "working" || status === "command", think = status === "thinking", idle = status === "idle";
   const dim = idle ? 0.6 : 1, look = think ? -1.1 : 0;
   return (
@@ -483,7 +504,7 @@ export default function AgentOffice() {
 
       <aside style={SS.side}>
         <div style={SS.brandWrap}>
-          <Octo color="#a855f7" size={46} status="command" cto />
+          <Octo color="#facc15" size={46} status="command" cto />
           <div style={SS.brand}>MISSION<br />CONTROL</div>
           <div style={{ ...SS.online, color: connected ? "#4ade80" : "#eab308" }}>
             <span style={{ ...SS.onDot, background: connected ? "#4ade80" : "#eab308" }} />
@@ -550,7 +571,7 @@ export default function AgentOffice() {
                 <div className="courier" style={{ left: courier.coords.x - 30, top: courier.coords.y - 50 }}>
                   {courier.showSpeech && <div className="courier-say">→ {courier.name}: {courier.task}</div>}
                   <div className="oshadow courier-shadow" />
-                  <Octo color="#a855f7" size={58} status="working" cto />
+                  <Octo color="#facc15" size={58} status="working" cto />
                 </div>
               )}
             </div>
@@ -873,8 +894,8 @@ const CSS = `
 @keyframes busyA { 0%,12%{left:26%;} 26%,38%{left:50%;} 52%,64%{left:74%;} 80%,92%{left:50%;} 100%{left:26%;} }
 @keyframes busyB { 0%,12%{left:74%;} 26%,38%{left:50%;} 52%,64%{left:26%;} 80%,92%{left:50%;} 100%{left:74%;} }
 .courier { position:absolute; z-index:7; display:flex; flex-direction:column; align-items:center; pointer-events:none; transition:left 1.2s cubic-bezier(.45,.05,.3,1), top 1.2s cubic-bezier(.45,.05,.3,1); }
-.courier-shadow { background:#a855f7; }
-.courier-say { position:absolute; bottom:100%; margin-bottom:4px; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; color:#d8b4fe; background:#070a14; border:1px solid #a855f7; border-radius:6px; padding:3px 8px; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 0 10px #a855f755; }
+.courier-shadow { background:#facc15; }
+.courier-say { position:absolute; bottom:100%; margin-bottom:4px; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; color:#fde68a; background:#070a14; border:1px solid #facc15; border-radius:6px; padding:3px 8px; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 0 10px #facc1555; }
 .agent-tag { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-family:'Press Start 2P',monospace; font-size:7px; letter-spacing:1px; opacity:.85; z-index:2; }
 .speech { position:absolute; top:10px; left:50%; transform:translateX(-50%); font-size:9px; font-family:'JetBrains Mono'; background:#070a14; border:1px solid; border-radius:6px; padding:2px 7px; z-index:4; white-space:nowrap; }
 .cue { position:absolute; left:50%; transform:translateX(-50%); top:30px; font-family:'Press Start 2P',monospace; font-size:11px; z-index:4; animation:cueFloat 1.4s ease-in-out infinite; }

@@ -32,11 +32,13 @@
       "Bash(perl -pi -e 's/\\\\bJeremiah\\\\b/Jay Jay/g' server/orchestrator.js)",
       "Bash(perl -pi -e 's/You are JEREMIAH/You are JAY JAY/g' server/gemini.js)",
       "Bash(perl -pi -e 's/\\\\bJeremiah\\\\b/Jay Jay/g' src/AgentOfficeRooms.jsx)",
-      "Bash(perl -pi -e 's/name: \"Jay Jay Ng\"/name: \"Jeremiah Ng\"/' src/AgentOfficeRooms.jsx)"
+      "Bash(perl -pi -e 's/name: \"Jay Jay Ng\"/name: \"Jeremiah Ng\"/' src/AgentOfficeRooms.jsx)",
+      "Bash(cd /Users/jeremiah/Documents/RudraProjects/pacmissioncontrol *)"
     ],
     "additionalDirectories": [
       "/Users/jeremiah/Desktop",
-      "/tmp/vid"
+      "/tmp/vid",
+      "/private/tmp"
     ]
   }
 }
