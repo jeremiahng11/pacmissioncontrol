@@ -10,7 +10,7 @@ import formbody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import { WebSocketServer } from "ws";
 
-import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL } from "./config.js";
+import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
   initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask,
@@ -22,6 +22,9 @@ import {
 import {
   verifyCredentials, setSession, clearSession, isAuthed, isAuthedFromHeader, loginPage,
 } from "./auth.js";
+import { toWordDoc, safeFilename } from "./wordExport.js";
+import { DEPARTMENTS } from "./agents.js";
+import { getAgent } from "./store.js";
 import { usingGemini } from "./gemini.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -75,7 +78,7 @@ app.get("/api/me", (req, reply) => {
 
 /* ---------- state + actions ---------- */
 app.get("/api/state", (req, reply) => {
-  reply.send({ ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL });
+  reply.send({ ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL, demoModel: GEMINI_DEMO_MODEL });
 });
 
 app.post("/api/tasks", (req, reply) => {
@@ -96,6 +99,20 @@ app.get("/api/documents/:id", (req, reply) => {
   const d = getDocument(req.params.id);
   if (!d) return reply.code(404).send({ error: "not found" });
   reply.send(d);
+});
+
+app.get("/api/documents/:id/download", (req, reply) => {
+  const d = getDocument(req.params.id);
+  if (!d) return reply.code(404).send({ error: "not found" });
+  const who = d.agentId && getAgent(d.agentId);
+  const dept = d.department && DEPARTMENTS[d.department]?.label;
+  const subtitle = [who && who.name, dept, new Date(d.createdAt).toLocaleString()].filter(Boolean).join("  ·  ");
+  const md = (d.prompt ? `> **Task:** ${d.prompt}\n\n` : "") + (d.content || "");
+  const html = toWordDoc({ title: d.title, subtitle, markdown: md });
+  reply
+    .header("Content-Type", "application/msword")
+    .header("Content-Disposition", `attachment; filename="${safeFilename(d.title)}"`)
+    .send(html);
 });
 
 app.delete("/api/documents/:id", (req, reply) => {
@@ -162,7 +179,7 @@ bus.on("tasksReset", (tasks) => broadcast(JSON.stringify({ type: "tasks", tasks 
 
 wss.on("connection", (ws) => {
   sockets.add(ws);
-  ws.send(JSON.stringify({ type: "snapshot", ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL }));
+  ws.send(JSON.stringify({ type: "snapshot", ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL, demoModel: GEMINI_DEMO_MODEL }));
   ws.on("close", () => sockets.delete(ws));
   ws.on("error", () => sockets.delete(ws));
 });

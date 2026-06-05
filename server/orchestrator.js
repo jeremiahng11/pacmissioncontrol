@@ -9,7 +9,7 @@ import {
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory } from "./gemini.js";
 import { DEPARTMENTS } from "./agents.js";
-import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL } from "./config.js";
+import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
 
 const MAX_ATTEMPTS = 2;
 const GEN_COOLDOWN_MS = 9000; // calmer autonomous cadence when AUTO is on
@@ -46,11 +46,17 @@ async function runTask(agent, task) {
     addEvent({ kind: "assign", text: `Jay Jay → ${agent.name}: ${task.title}`, agentId: agent.id, taskId: task.id });
     await wait(800 + Math.random() * 700);
 
+    // Tasks YOU assign run on the real model (GEMINI_MODEL). The AUTO demo is
+    // simulated (model=null, no API) unless GEMINI_DEMO_MODEL is set (e.g.
+    // free-tier flash). Demo tasks never produce real documents/memory.
+    const isUser = task.createdBy === "user";
+    const model = isUser ? GEMINI_MODEL : (GEMINI_DEMO_MODEL || null);
+
     setAgent(agent.id, { status: "working", task: task.title });
-    const memoryText = getMemoryText(agent.department);
+    const memoryText = isUser ? getMemoryText(agent.department) : "";
     let result;
     try {
-      result = await runWork(agent, task, memoryText);
+      result = await runWork(agent, task, memoryText, model);
     } catch (err) { handleError(agent, task, err); return; }
     updateTask(task.id, { status: "review", result });
 
@@ -58,17 +64,19 @@ async function runTask(agent, task) {
     addEvent({ kind: "review", text: `${agent.name} submitted: ${task.title}`, agentId: agent.id, taskId: task.id });
     let verdict;
     try {
-      verdict = await runReview(task, result);
+      verdict = await runReview(task, result, model);
     } catch (err) { handleError(agent, task, err); return; }
 
     if (verdict.complete) {
       updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note });
-      // Save the deliverable as a document and fold a note into the
-      // department's memory so future tasks continue the work.
-      createDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
-      const note = await summarizeForMemory(agent, task, result).catch(() => `${task.title} — completed.`);
-      const label = `${(DEPARTMENTS[agent.department]?.label) || agent.department} memory`;
-      appendMemory(agent.department, `- ${note}`, label, agent.name);
+      if (isUser) {
+        // Real work only: save the deliverable as a document and fold a note
+        // into the department's memory so future tasks continue the work.
+        createDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
+        const note = await summarizeForMemory(agent, task, result, model).catch(() => `${task.title} — completed.`);
+        const label = `${(DEPARTMENTS[agent.department]?.label) || agent.department} memory`;
+        appendMemory(agent.department, `- ${note}`, label, agent.name);
+      }
       addEvent({ kind: "done", text: `Jay Jay ✓ ${agent.name}: ${task.title} — ${verdict.note}`, agentId: agent.id, taskId: task.id });
     } else if ((task.attempts || 0) + 1 < MAX_ATTEMPTS) {
       updateTask(task.id, { status: "queued", attempts: (task.attempts || 0) + 1, assignedTo: agent.id, startedAt: null, reviewNotes: verdict.note });
@@ -126,7 +134,7 @@ function maybeGenerate(agent) {
   if (Date.now() - (lastGen.get(agent.department) || 0) < GEN_COOLDOWN_MS) return;
   generating.add(agent.department);
   lastGen.set(agent.department, Date.now());
-  generateTask(agent)
+  generateTask(agent, GEMINI_DEMO_MODEL || null) // null => canned title, no API call
     .then((t) => createTask({ ...t, department: agent.department, createdBy: "cto" }))
     .catch((e) => console.error("[orch] generateTask", e.message))
     .finally(() => generating.delete(agent.department));

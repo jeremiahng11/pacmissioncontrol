@@ -149,15 +149,18 @@ async function loadAgents() {
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const def of AGENT_DEFS) {
     const row = byId.get(def.id);
+    // Status/task are transient (driven by the live loop). Always boot agents
+    // at rest — never restore a mid-task "thinking"/"working" state from the
+    // DB, or a restart leaves them stuck with no task actually running.
     const agent = {
       ...def,
-      status: row?.status || (def.cto ? "command" : "idle"),
-      task: row?.task || (def.cto ? "running the office" : "standing by"),
-      currentTaskId: row?.current_task_id || null,
+      status: def.cto ? "command" : "idle",
+      task: def.cto ? "running the office" : "standing by",
+      currentTaskId: null,
       lastRunAt: row?.last_run_at ? new Date(row.last_run_at).getTime() : null,
     };
     state.agents.set(def.id, agent);
-    if (pool && !row) await persistAgent(agent);
+    if (pool) await persistAgent(agent);
   }
 }
 

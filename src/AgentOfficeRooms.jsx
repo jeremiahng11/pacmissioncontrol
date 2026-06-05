@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
@@ -347,7 +347,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "" });
   const [selected, setSelected] = useState(null);
@@ -355,6 +355,16 @@ export default function AgentOffice() {
   const [say, setSay] = useState(null);
   const [courier, setCourier] = useState(null);
   const [taskFilter, setTaskFilter] = useState("all");
+  const [idleDismissed, setIdleDismissed] = useState(false);
+
+  const downloadDoc = (id) => {
+    const a = document.createElement("a");
+    a.href = `/api/documents/${id}/download`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
 
   const roomsRef = useRef(null);
   const queueRef = useRef([]);
@@ -492,11 +502,14 @@ export default function AgentOffice() {
 
             {settings.autonomous ? (
               <div style={SS.autoBanner}>
-                <Bot size={14} /> <b>AUTO mode is ON</b> — Jay Jay is generating its own tasks (the demo). These are real Gemini calls. Turn <b>AUTO OFF</b> to run only the tasks you assign.
+                <Bot size={14} /> <b>AUTO is ON — visual demo.</b> {demoModel
+                  ? <>Jay Jay runs demo tasks on <b>{demoModel}</b> (free tier) — no paid Pro calls. Only tasks <b>you</b> assign use {model || "the paid model"}.</>
+                  : <>Demo tasks are simulated — <b>no Gemini calls, costs nothing</b>. Only tasks <b>you</b> assign use the API.</>}
               </div>
-            ) : activeTasks.length === 0 ? (
+            ) : activeTasks.length === 0 && !idleDismissed ? (
               <div style={SS.idleBanner}>
-                Office idle — assign a task in the <b>Tasks</b> tab and Jay Jay will dispatch it. (Or press <b>AUTO ON</b> for the self-running demo.)
+                <span style={{ flex: 1 }}>Office idle — assign a task in the <b>Tasks</b> tab and Jay Jay will dispatch it (real work, uses the API). Or press <b>AUTO ON</b> for a free visual demo.</span>
+                <button style={SS.bannerClose} onClick={() => setIdleDismissed(true)} title="Dismiss"><X size={14} /></button>
               </div>
             ) : null}
 
@@ -621,7 +634,10 @@ export default function AgentOffice() {
             <div style={SS.secTitle}>DELIVERABLE</div>
             <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
             {selectedTask.reviewNotes && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
-            <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
+            <div style={SS.modalActions}>
+              {(() => { const td = documents.find((d) => d.taskId === selectedTask.id); return td ? <button style={SS.downloadBtn} onClick={() => downloadDoc(td.id)}><Download size={13} /> DOWNLOAD .DOC</button> : null; })()}
+              <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
+            </div>
           </div>
         </div>
       )}
@@ -640,7 +656,10 @@ export default function AgentOffice() {
             {doc.prompt && <><div style={SS.secTitle}>ASSIGNED TASK</div><div style={SS.modalPrompt}>{doc.prompt}</div></>}
             <div style={SS.secTitle}>OUTPUT</div>
             <div style={SS.resultBox}>{doc.content}</div>
-            <button style={SS.delBtn} onClick={() => { if (confirm("Delete this document?")) { deleteDocument(doc.id); setDoc(null); } }}><Trash2 size={13} /> DELETE DOCUMENT</button>
+            <div style={SS.modalActions}>
+              <button style={SS.downloadBtn} onClick={() => downloadDoc(doc.id)}><Download size={13} /> DOWNLOAD .DOC</button>
+              <button style={SS.delBtn} onClick={() => { if (confirm("Delete this document?")) { deleteDocument(doc.id); setDoc(null); } }}><Trash2 size={13} /> DELETE</button>
+            </div>
           </div>
         </div>
       )}
@@ -677,7 +696,7 @@ const SS = {
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
   autoBanner: { display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.08)", border: "1px solid rgba(234,179,8,.35)", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
-  idleBanner: { fontSize: 11, color: "#8aa0c0", background: "#0c1226", border: "1px solid #1a2440", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
+  idleBanner: { display: "flex", alignItems: "center", gap: 10, fontSize: 11, color: "#8aa0c0", background: "#0c1226", border: "1px solid #1a2440", borderRadius: 9, padding: "9px 12px", marginBottom: 14, lineHeight: 1.45 },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },
   btn: { display: "flex", alignItems: "center", gap: 6, fontSize: 9.5, fontWeight: 700, letterSpacing: .5, padding: "8px 11px", borderRadius: 8, cursor: "pointer", fontFamily: MONO, border: "1px solid" },
   gold: { color: "#1a1405", background: "#f5c95b", borderColor: "#f5c95b" },
@@ -771,7 +790,10 @@ const SS = {
   modalPrompt: { fontSize: 12, color: "#9db0c8", background: "#070a14", border: "1px solid #161f3a", borderRadius: 8, padding: 10, marginBottom: 14, whiteSpace: "pre-wrap", lineHeight: 1.5 },
   resultBox: { fontSize: 12.5, color: "#cfe3d8", background: "#070a14", border: "1px solid #1a2440", borderRadius: 8, padding: 12, whiteSpace: "pre-wrap", lineHeight: 1.55, marginTop: 4 },
   reviewNote: { fontSize: 11, color: "#bbf7d0", marginTop: 10 },
-  delBtn: { display: "flex", alignItems: "center", gap: 6, marginTop: 16, padding: "8px 11px", borderRadius: 8, border: "1px solid rgba(251,85,112,.4)", background: "rgba(251,85,112,.1)", color: "#fca5b5", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  modalActions: { display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" },
+  downloadBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  delBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 11px", borderRadius: 8, border: "1px solid rgba(251,85,112,.4)", background: "rgba(251,85,112,.1)", color: "#fca5b5", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  bannerClose: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 2, display: "flex", flexShrink: 0 },
 };
 
 const CSS = `

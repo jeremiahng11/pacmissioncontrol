@@ -15,6 +15,7 @@ export function useAgentSocket() {
   const [settings, setSettings] = useState({ paused: false, autonomous: true });
   const [gemini, setGemini] = useState(false);
   const [model, setModel] = useState("");
+  const [demoModel, setDemoModel] = useState("");
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
 
@@ -33,6 +34,7 @@ export function useAgentSocket() {
       if (s.settings) setSettings(s.settings);
       if (typeof s.gemini === "boolean") setGemini(s.gemini);
       if (typeof s.model === "string") setModel(s.model);
+      if (typeof s.demoModel === "string") setDemoModel(s.demoModel);
     };
 
     const connect = () => {
@@ -96,5 +98,5 @@ export function useAgentSocket() {
   const deleteMemory = useCallback((scope) => api.deleteMemory(scope).catch(() => {}), []);
   const resolveIssue = useCallback((id) => api.resolveIssue(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue };
+  return { agents, tasks, events, documents, memory, issues, settings, gemini, model, demoModel, connected, assignTask, deleteTask, clearTasks, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue };
 }

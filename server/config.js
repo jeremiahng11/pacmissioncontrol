@@ -13,9 +13,14 @@ export const COOKIE_NAME = "mc_session";
 export const DATABASE_URL = process.env.DATABASE_URL || "";
 
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-// Pro requires billing enabled on the key's Google Cloud project (free-tier
-// limit is 0). Use gemini-2.5-flash if billing is not set up.
+// Model for the tasks YOU assign (real work). Pro requires billing enabled on
+// the key's Google Cloud project (free-tier limit is 0); use gemini-2.5-flash
+// if billing is not set up.
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
+
+// Model for the AUTO visual demo. Empty = pure simulation (no API calls, no
+// cost). Set to "gemini-2.5-flash" for real but free-tier demo output.
+export const GEMINI_DEMO_MODEL = process.env.GEMINI_DEMO_MODEL || "";
 // No key -> the office still runs, with simulated deliverables.
 export const SIMULATE = !GEMINI_API_KEY;
 

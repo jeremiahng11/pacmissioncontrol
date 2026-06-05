@@ -13,18 +13,23 @@ function isRateLimit(msg) {
   return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
 }
 
-async function generate(system, prompt, { json = false, temperature = 0.7 } = {}) {
+const TIMEOUT_MS = 60000; // a hung/slow call must not freeze an agent forever
+
+async function generate(system, prompt, { json = false, temperature = 0.7, model } = {}) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          systemInstruction: system,
-          temperature,
-          ...(json ? { responseMimeType: "application/json" } : {}),
-        },
-      });
+      const res = await Promise.race([
+        ai.models.generateContent({
+          model: model || GEMINI_MODEL,
+          contents: prompt,
+          config: {
+            systemInstruction: system,
+            temperature,
+            ...(json ? { responseMimeType: "application/json" } : {}),
+          },
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini request timed out")), TIMEOUT_MS)),
+      ]);
       return (res.text || "").trim();
     } catch (e) {
       const msg = e?.message || String(e);
@@ -51,12 +56,14 @@ const SIM = {
 };
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-/* Worker performs the task, building on the department's memory. */
-export async function runWork(agent, task, memoryText = "") {
-  if (!ai) {
+/* Worker performs the task, building on the department's memory.
+   model=null (or no key) => simulated path: no API call, no cost. */
+export async function runWork(agent, task, memoryText = "", model = null) {
+  if (!ai || !model) {
     await wait(1200 + Math.random() * 1800);
-    const cont = memoryText ? " (continuing from earlier notes)" : "";
-    return `Done: ${task.title}${cont}.\n\n(Simulated deliverable — set GEMINI_API_KEY to have ${agent.name} produce real work.)`;
+    return !model
+      ? `Demo task — ${task.title}.\n\n(Visual demo only; no Gemini call was made.)`
+      : `Done: ${task.title}.\n\n(Simulated — set GEMINI_API_KEY for real work.)`;
   }
   // Throws on API error — the orchestrator turns that into a blocked task +
   // an Issue (it must NOT become a "done" deliverable).
@@ -64,20 +71,21 @@ export async function runWork(agent, task, memoryText = "") {
     ? `\n\nNOTES FROM EARLIER WORK (build on these, continue and add to them, don't repeat):\n${memoryText}`
     : "";
   const out = await generate(
-    `${agent.persona} Produce the deliverable directly and concisely (short paragraphs or a tight list). No preamble.`,
-    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}`
+    `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. Follow any format the task requests. No preamble like "Here is" — start directly with the title heading.`,
+    `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}`,
+    { model }
   );
   return out || `Done: ${task.title}.`;
 }
 
 /* One-line memory note so future related tasks can continue the work. */
-export async function summarizeForMemory(agent, task, result) {
-  if (!ai) return `${task.title} — completed.`;
+export async function summarizeForMemory(agent, task, result, model = null) {
+  if (!ai || !model) return `${task.title} — completed.`;
   try {
     const txt = await generate(
       "In ONE short line (max 18 words), note what was done and any key fact worth remembering for future related work. No preamble.",
       `TASK: ${task.title}\nRESULT:\n${result}`,
-      { temperature: 0.3 }
+      { temperature: 0.3, model }
     );
     return (txt || "").replace(/\s+/g, " ").slice(0, 180) || `${task.title} — completed.`;
   } catch {
@@ -87,15 +95,15 @@ export async function summarizeForMemory(agent, task, result) {
 
 /* CTO reviews the deliverable. Throws on API error (-> Issue); a bad/parse
    response just defaults to approved rather than blocking the pipeline. */
-export async function runReview(task, result) {
-  if (!ai) {
+export async function runReview(task, result, model = null) {
+  if (!ai || !model) {
     await wait(400 + Math.random() * 500);
-    return { complete: true, note: "approved (sim)" };
+    return { complete: true, note: !model ? "demo" : "approved (sim)" };
   }
   const txt = await generate(
     'You are JAY JAY, the CTO, reviewing a deliverable. Decide if it adequately completes the task. Respond ONLY as JSON: {"complete": boolean, "note": string up to 10 words}.',
     `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${result}`,
-    { json: true, temperature: 0.2 }
+    { json: true, temperature: 0.2, model }
   );
   try {
     const p = JSON.parse(txt);
@@ -105,9 +113,10 @@ export async function runReview(task, result) {
   }
 }
 
-/* CTO invents a department-appropriate task when the queue is empty. */
-export async function generateTask(agent) {
-  if (!ai) {
+/* CTO invents a department-appropriate task when the queue is empty.
+   model=null (AUTO demo without a demo model) uses a canned title — no API. */
+export async function generateTask(agent, model = null) {
+  if (!ai || !model) {
     const title = pick(SIM[agent.department] || ["run a routine check"]);
     return { title, prompt: `${title}. Provide a brief, useful result.` };
   }
@@ -115,7 +124,7 @@ export async function generateTask(agent) {
     const txt = await generate(
       `You are JAY JAY, the CTO, assigning ONE small self-contained task to ${agent.name} (${agent.role}, ${agent.room}). It must be completable by an LLM in a single shot with no external tools. Respond ONLY as JSON: {"title": string up to 8 words, "prompt": string}.`,
       `Assign a useful task to ${agent.name}.`,
-      { json: true, temperature: 1.0 }
+      { json: true, temperature: 1.0, model }
     );
     const p = JSON.parse(txt);
     if (p.title && p.prompt) {
