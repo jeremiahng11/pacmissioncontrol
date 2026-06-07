@@ -7,6 +7,9 @@ import { GoogleGenAI } from "@google/genai";
 import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL, GEMINI_FLASH_MODEL, GEMINI_EMBED_MODEL } from "./config.js";
 import { executeTool } from "./tools.js";
 import { addEvent, recordUsage } from "./store.js";
+import { AGENT_DEFS } from "./agents.js";
+
+const AGENT_BY_DEPT = Object.fromEntries(AGENT_DEFS.map((a) => [a.department, a]));
 
 // Two clients so Pro and Flash can bill on separate keys. Flash falls back to
 // the Pro key if no separate Flash key is set. Calls route by model name.
@@ -126,6 +129,23 @@ async function generateWithTools(system, prompt, opts = {}) {
   }
 }
 
+// Handoff: one agent consults another department's specialist mid-task and gets
+// a concise answer to fold into its own deliverable.
+export async function consultAgent(department, question, model = null) {
+  const def = AGENT_BY_DEPT[department];
+  if (!ai || !model) return `(${def?.name || department} is unavailable; proceeding without their input.)`;
+  const persona = def?.persona || "You are a helpful specialist.";
+  try {
+    return await generate(
+      `${persona} A teammate has asked for your expert input on their task. Answer concisely and practically — a few sentences or a short list — focused on exactly what they need. No preamble.`,
+      String(question || "").slice(0, 4000),
+      { model, temperature: 0.4 }
+    );
+  } catch (e) {
+    return `(${def?.name || department} couldn't respond: ${e.message})`;
+  }
+}
+
 // Embed text for semantic memory (RAG). Uses the Flash key (cheap). Returns a
 // vector, or null if embeddings are unavailable (callers fall back to keywords).
 export async function embed(text) {
@@ -189,7 +209,9 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}${codeBlock}`;
 
   if (tools && toolCtx) {
-    const toolNote = "\n\nYou can use tools: http_request (actually call an API endpoint to test it) and request_credentials (ask the human for sandbox keys). For any secret, use a {{NAME}} placeholder. ACTUALLY run the tests with http_request and report the real responses; if you don't have a needed credential, call request_credentials and then produce a test plan noting execution is pending.";
+    const toolNote = agent.department === "development"
+      ? "\n\nTools: request_help (consult another department), http_request (actually call an API to test it — use {{NAME}} placeholders for secrets), request_credentials (ask the human for sandbox keys). Actually run tests with http_request and report real responses; if you lack a credential, call request_credentials. Use request_help when another department's expertise would improve the result."
+      : "\n\nTool: request_help — consult another department's specialist when their expertise would genuinely improve your deliverable (e.g. ask Observatory to research something, Development to sanity-check code, Security for a risk check). Use it sparingly, then fold their answer into your work.";
     const out = await generateWithTools(system + toolNote, userPrompt, { model, media, tools, toolCtx });
     return out || `Done: ${task.title}.`;
   }

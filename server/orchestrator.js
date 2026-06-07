@@ -8,7 +8,7 @@ import {
   upsertDocument, recallMemory, appendMemory, addMemoryNote, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
   recordOutcome, getStats,
 } from "./store.js";
-import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed } from "./gemini.js";
+import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL, GEMINI_DAILY_BUDGET_USD } from "./config.js";
@@ -91,9 +91,14 @@ async function runTask(agent, task) {
           .filter((a) => /^image\//.test(a.mime) || a.mime === "application/pdf" || /^text\//.test(a.mime))
           .map((a) => ({ mimeType: a.mime, data: a.data }))
       : [];
-    // Tools (least-privilege per department): Development can call APIs.
+    // Tools: every agent can hand off (request_help); Development also gets the
+    // API/credential tools. consult() runs a peer department's specialist (Flash).
     const tools = isUser ? toolsFor(agent.department) : null;
-    const toolCtx = tools ? { taskId: task.id, agentId: agent.id, agentName: agent.name, credentials: getTaskCredentials(task.id) } : null;
+    const toolCtx = tools ? {
+      taskId: task.id, agentId: agent.id, agentName: agent.name,
+      credentials: getTaskCredentials(task.id),
+      consult: (dept, q) => consultAgent(dept, q, lightModel),
+    } : null;
     // Upstream: deliverables from completed dependencies, so this step builds on them.
     const upstream = isUser
       ? (task.dependsOn || []).map((id) => getTask(id)).filter((d) => d && d.status === "done" && d.result).map((d) => ({ title: d.title, result: d.result }))

@@ -17,10 +17,26 @@ function urlAllowed(raw) {
   return true;
 }
 
+// Every agent can hand off to a teammate; Development additionally gets the
+// network/credential tools (least privilege).
+const HELP_TOOL = {
+  name: "request_help",
+  description: "Consult another department's specialist when their expertise would improve your deliverable (e.g. ask Observatory for research, Security for a risk check, Development for a code review). Returns their answer to fold into your work. Use sparingly — only when it genuinely helps.",
+  parameters: {
+    type: "object",
+    properties: {
+      department: { type: "string", description: "one of: observatory, research_lab, development, admin, security" },
+      question: { type: "string", description: "a specific, self-contained question for them" },
+    },
+    required: ["department", "question"],
+  },
+};
+
 export function toolsFor(department) {
-  if (department !== "development") return null; // least privilege
+  if (department !== "development") return [{ functionDeclarations: [HELP_TOOL] }];
   return [{
     functionDeclarations: [
+      HELP_TOOL,
       {
         name: "http_request",
         description: "Call an HTTP API endpoint to test it. For any secret (API key, token), put a {{NAME}} placeholder in the url/headers/body — it's substituted server-side and never exposed. Returns status, headers, and a truncated body.",
@@ -58,10 +74,25 @@ function redact(text, creds) {
   return t;
 }
 
+const VALID_DEPTS = new Set(["observatory", "research_lab", "development", "admin", "security"]);
+const DEPT_AGENT = { observatory: "Scout", research_lab: "Scribe", development: "Orbit", admin: "Vault", security: "Warden" };
+
 export async function executeTool(name, args, ctx) {
+  if (name === "request_help") return requestHelp(args, ctx);
   if (name === "http_request") return httpRequest(args, ctx);
   if (name === "request_credentials") return requestCredentials(args, ctx);
   return { error: "unknown tool" };
+}
+
+async function requestHelp(args, ctx) {
+  const dept = String(args.department || "").trim();
+  const question = String(args.question || "").trim();
+  if (!VALID_DEPTS.has(dept)) return { error: `unknown department; choose one of: ${[...VALID_DEPTS].join(", ")}` };
+  if (!question) return { error: "question is required" };
+  if (typeof ctx.consult !== "function") return { error: "handoffs unavailable" };
+  addEvent({ kind: "handoff", text: `${ctx.agentName} → ${DEPT_AGENT[dept] || dept}: ${question.slice(0, 70)}`, taskId: ctx.taskId, agentId: ctx.agentId });
+  const answer = await ctx.consult(dept, question);
+  return { from: DEPT_AGENT[dept] || dept, answer: String(answer || "").slice(0, 6000) };
 }
 
 async function httpRequest(args, ctx) {
