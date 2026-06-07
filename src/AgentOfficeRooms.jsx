@@ -50,6 +50,7 @@ const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" 
 const fmtTime = (ms) => { try { return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const EVENT_COLOR = { assign: "#facc15", handoff: "#67e8f9", tool: "#38bdf8", review: "#eab308", done: "#4ade80", redo: "#fb923c", fail: "#fb5570", issue: "#fb5570", system: "#9db0c8" };
 const WORK_INFO = { development: ["</>", "coding"], observatory: ["◎", "scanning"], research_lab: ["✎", "writing"], security: ["⛨", "auditing"], admin: ["▤", "sorting"], _: ["•", "working"] };
+const NAME_ROOM = Object.fromEntries(AGENTS.map((a) => [a.name.toUpperCase(), a.room]));
 const WORK_FX = { development: ["</>", "{ }", ";", "()", "=>"], observatory: ["✦", "·", "◦", "✧", "·"], research_lab: ["✎", "¶", "A", "“", "·"], security: ["⛨", "✓", "!", "·", "✓"], admin: ["▤", "≡", "✓", "·", "▦"], _: ["·", "·", "·"] };
 const PREVIEW_DEVICES = [["mobile", "Mobile", 390], ["mobileL", "Mobile L", 430], ["tablet", "Tablet", 768], ["desktop", "Desktop", 1280]];
 
@@ -740,6 +741,34 @@ export default function AgentOffice() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Teamwork lines: when agents hand off / consult / QA each other, draw an
+  // animated connection between their rooms in the Visual office.
+  const [commFx, setCommFx] = useState([]);
+  const commEvtRef = useRef(0);
+  useEffect(() => {
+    if (!events.length) return;
+    const maxId = Math.max(...events.map((e) => e.id));
+    if (commEvtRef.current === 0) { commEvtRef.current = maxId; return; }
+    const fresh = events.filter((e) => e.id > commEvtRef.current);
+    commEvtRef.current = maxId;
+    for (const e of fresh) {
+      let from, to, label;
+      if (e.kind === "handoff") {
+        const m = e.text.match(/^(.+?)\s*→\s*(.+?):/);
+        if (m) { from = NAME_ROOM[m[1].trim().toUpperCase()]; to = NAME_ROOM[m[2].trim().toUpperCase()]; label = "asks"; }
+      } else if (e.agentId === "scout" && /QA-test/i.test(e.text)) {
+        from = "OBSERVATORY"; to = "WORKSHOP"; label = "QA";
+      } else if (/Scout's QA found/i.test(e.text)) {
+        from = "OBSERVATORY"; to = "WORKSHOP"; label = "bugs";
+      }
+      if (from && to && from !== to) {
+        const id = e.id;
+        setCommFx((p) => [...p.filter((x) => x.id !== id), { id, from, to, label }].slice(-4));
+        setTimeout(() => setCommFx((p) => p.filter((x) => x.id !== id)), 4500);
+      }
+    }
+  }, [events]);
+
   // Toasts: notify when one of YOUR tasks completes or fails (any page).
   const toastEvtRef = useRef(0);
   useEffect(() => {
@@ -910,6 +939,27 @@ export default function AgentOffice() {
                   <div className="oshadow courier-shadow" />
                   <span className="jay-bob"><Octo color="#facc15" size={76} status="working" cto flip={jay.facing === "left"} /></span>
                 </div>
+              )}
+              {commFx.length > 0 && (
+                <svg className="comm-overlay" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 8, overflow: "visible" }}>
+                  {commFx.map((cm) => {
+                    const a = spot(cm.from, 0.5, 0.42), b = spot(cm.to, 0.5, 0.42);
+                    if (!a || !b) return null;
+                    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+                    const path = `M ${a.x} ${a.y} L ${b.x} ${b.y}`, rpath = `M ${b.x} ${b.y} L ${a.x} ${a.y}`;
+                    return (
+                      <g key={cm.id}>
+                        <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#67e8f9" strokeWidth="1.6" strokeDasharray="5 5" opacity="0.5" className="comm-line" />
+                        <circle r="4.5" fill="#67e8f9"><animateMotion dur="1.1s" repeatCount="indefinite" path={path} /></circle>
+                        <circle r="3.5" fill="#a855f7"><animateMotion dur="1.1s" begin="0.55s" repeatCount="indefinite" path={rpath} /></circle>
+                        <g transform={`translate(${mx} ${my})`}>
+                          <rect x="-17" y="-8" width="34" height="15" rx="7.5" fill="#070a14" stroke="#67e8f9" strokeOpacity="0.7" />
+                          <text x="0" y="2.5" textAnchor="middle" fontSize="8" fontWeight="700" fill="#67e8f9" fontFamily="'JetBrains Mono', monospace" style={{ letterSpacing: "0.5px" }}>{cm.label}</text>
+                        </g>
+                      </g>
+                    );
+                  })}
+                </svg>
               )}
             </div>
 
@@ -1576,6 +1626,7 @@ const CSS = `
 @keyframes floatUp { 0%{opacity:0; transform:translateY(6px) scale(.7);} 22%{opacity:.95;} 100%{opacity:0; transform:translateY(-32px) scale(1.15);} }
 /* keyboard key-presses while coding */
 .key-flash { animation:keyFlash .55s ease-in-out infinite; } @keyframes keyFlash { 0%,100%{opacity:.3;} 50%{opacity:1;} }
+.comm-line { animation:commDash .6s linear infinite; } @keyframes commDash { to{stroke-dashoffset:-20;} }
 .mc-marquee { animation:marq 26s linear infinite; will-change:transform; } @keyframes marq { from{transform:translateX(0);} to{transform:translateX(-50%);} }
 .mc-btn:hover { filter:brightness(1.15); } .mc-btn:active { transform:scale(.97); }
 `;

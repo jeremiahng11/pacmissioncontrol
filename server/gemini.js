@@ -6,7 +6,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL, GEMINI_FLASH_MODEL, GEMINI_EMBED_MODEL } from "./config.js";
 import { executeTool } from "./tools.js";
-import { addEvent, recordUsage } from "./store.js";
+import { addEvent, recordUsage, setAgent, getAgent } from "./store.js";
 import { AGENT_DEFS } from "./agents.js";
 
 const AGENT_BY_DEPT = Object.fromEntries(AGENT_DEFS.map((a) => [a.department, a]));
@@ -250,8 +250,12 @@ async function qaTestBuild(build, task, model) {
 
 async function qaAndFixBuild(build, task, model) {
   if (!ai || !model || !build || build.length < 200) return build;
+  // Show Scout actively QA-testing (its room scans) if it's free.
+  let scoutBusied = false;
+  try { const sc = getAgent("scout"); if (sc && sc.status === "idle") { setAgent("scout", { status: "working", task: `QA-testing ${task.title}` }); scoutBusied = true; } } catch {}
   try { addEvent({ kind: "review", text: `Scout is QA-testing "${task.title}"…`, taskId: task.id, agentId: "scout" }); } catch {}
   const qa = await qaTestBuild(build, task, model);
+  if (scoutBusied) { try { setAgent("scout", { status: "idle", task: "standing by" }); } catch {} }
   if (qa.clean || !qa.bugs.length) {
     try { addEvent({ kind: "system", text: `Scout QA: "${task.title}" passed — no bugs found.`, taskId: task.id, agentId: "scout" }); } catch {}
     return build;
