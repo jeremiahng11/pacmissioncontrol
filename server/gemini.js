@@ -183,25 +183,25 @@ const BUILD_MAX_TOKENS = 60000;
 const CRAFT_BAR =
   "SCALE & COMPLETENESS — THIS IS THE #1 MISS: a real onboarding/banking flow is 12-20+ distinct screens and is LONG (well over a thousand lines). Build the ENTIRE journey end to end — every step plus its empty / loading / success / error states — NOT a 2-3 screen sample. Write ALL the code; never stop early, never summarise, never leave '...' or 'rest of the screens here'. If you're running long, keep going — completeness beats brevity.\n" +
   "CRAFT (what separates pro from generic):\n" +
-  "- Design tokens in :root: a DISTINCTIVE brand identity (NOT default Tailwind/bootstrap blue — choose a real palette), a characterful display font for headings (e.g. a serif like Fraunces, or a strong sans) + Inter for body via Google Fonts, a shadow scale (sm/md/lg), a consistent radius.\n" +
+  "- Design tokens in :root: a DISTINCTIVE brand identity (NOT generic default blue — choose a real palette), a characterful display font for headings (e.g. a serif like Fraunces, or a strong sans) + Inter for body via a Google Fonts <link>, a shadow scale (sm/md/lg), a consistent radius.\n" +
   "- Real motion on EVERY screen change: transitions with iOS/spring easings such as cubic-bezier(0.32,0.72,0,1) and cubic-bezier(0.34,1.56,0.64,1); staggered fade-up entrances on content; animated success checkmarks; progress bars between steps; skeletons while 'loading'.\n" +
   "- Considered layout: comfortable spacing, aligned grids, thumb-friendly targets, and absolutely no clipped or overlapping text (verify every label fits its box).";
 const ENG_MULTI =
   "ENGINEERING: Write the FULL project — every file complete, no placeholders, no \"...\". Split into PROPER, separate files (do NOT cram everything into one file). Output EACH file as a marker line \"===== FILE: relative/path.ext =====\" immediately followed by its fenced code block, so it packages into a downloadable .zip with the correct folder structure. Every import / link / href / src / path MUST use the exact file names and resolve. Include a README.md with exact run instructions. Keep prose to a one-line intro; the deliverable is the project.";
-// The #1 reason generated UIs look broken: inventing Tailwind colour/font
-// utilities (text-brand-blue, bg-primary) without configuring them — Tailwind
-// silently ignores them and the page renders unstyled.
+// CSS framework CDNs are a footgun for generated code (URL typos like
+// 'httpss://', undefined utility classes) and the best hand-built results don't
+// use them. Mandate hand-written CSS with design tokens.
 const STYLING_RULES =
-  "STYLING — READ CAREFULLY (this is the #1 thing that makes generated UIs look broken, so get it right):\n" +
-  "- A Tailwind class for a CUSTOM colour/font (e.g. text-brand-blue, bg-primary, text-text-secondary) does NOTHING unless you define it. If you use the Tailwind CDN with ANY custom token, you MUST add this BEFORE using it: <script>tailwind.config={theme:{extend:{colors:{ /* every custom colour you reference */ }, fontFamily:{ /* custom fonts */ }}}}</script>. Undefined utilities are silently dropped and the UI looks unstyled.\n" +
-  "- SAFEST APPROACH (prefer this): write your visual design as real CSS classes in css/styles.css (e.g. .btn-primary, .card, .screen) using CSS variables — and apply THOSE class names in the HTML. Use Tailwind only for layout/spacing with its BUILT-IN classes (flex, p-4, rounded-2xl, text-slate-900). Do NOT reference a CSS variable via a made-up Tailwind class name.\n" +
-  "- NEVER mix the two by mistake: if css defines --text-primary, the HTML must use color:var(--text-primary) (or a real .class), NOT a class called text-text-primary.\n" +
-  "- Final self-check: every class in the HTML is either a real Tailwind built-in OR defined in tailwind.config OR a class you wrote in styles.css. No invented utilities.";
+  "STYLING — write REAL, hand-crafted CSS. This is non-negotiable and is how the best results are built:\n" +
+  "- DO NOT use the Tailwind CDN or any CSS-framework CDN (cdn.tailwindcss.com, bootstrap, etc.). They cause broken output here — URL typos and undefined utility classes leave the page unstyled. Do NOT use Tailwind utility classes at all.\n" +
+  "- Put your ENTIRE design system in css/styles.css: design tokens in :root (a distinctive colour palette, a display font + body font, spacing, radius, a shadow scale), then real semantic classes (.btn, .card, .screen, .input, .chip, etc.). Reference tokens with var(--x).\n" +
+  "- Load fonts with a Google Fonts <link> in <head> — and double-check the URL is EXACTLY https:// (no typos like httpss://). It's the only external resource.\n" +
+  "- EVERY class used in the HTML must be defined in your styles.css. No undefined classes, no framework utilities. Self-check before finishing: would this render fully styled with zero network/CDN dependencies besides the font link? It must.";
 const STACK_GUIDE = {
   django: "Stack: Django (Python). Deliver manage.py, the project package (settings.py with INSTALLED_APPS, urls.py, wsgi.py), app(s) with models.py / views.py / urls.py / admin.py, templates/ and static/ (css, js) for the UI, requirements.txt, and README.md (venv, pip install, migrate, runserver).",
   node: "Stack: Node.js. Deliver package.json (scripts + deps), an Express or Fastify server, routes, and a front-end (server-rendered views or a public/ folder with separate html/css/js), plus README.md (npm install, npm start).",
   flutter: "Stack: Flutter (Dart), Material 3. Deliver pubspec.yaml, lib/main.dart, and lib/ split into screens & widgets, plus README.md (flutter pub get, flutter run).",
-  react: "Stack: React + Vite. Deliver package.json, index.html, vite.config.js, src/main.jsx, src/App.jsx and components in separate files, styling via Tailwind or CSS modules, plus README.md (npm install, npm run dev).",
+  react: "Stack: React + Vite. Deliver package.json, index.html, vite.config.js, src/main.jsx, src/App.jsx and components in separate files, styling via plain CSS / CSS modules (no Tailwind CDN), plus README.md (npm install, npm run dev).",
   "react-native": "Stack: React Native (Expo) + React Navigation. Deliver package.json, App.js, and screens/components in separate files, plus README.md (npm install, npx expo start).",
 };
 
@@ -247,7 +247,7 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
       const rules = webStack.has(build.stack) ? `\n\n${STYLING_RULES}` : "";
       system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}${rules}\n\n${CRAFT_BAR}\n\n${ENG_MULTI}`;
     } else if (singleRequested) {
-      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html (inline <style> with your CSS + inline <script>; Tailwind CDN only with a tailwind.config for any custom tokens). Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html with all your hand-written CSS in an inline <style> (design tokens in :root) and JS in an inline <script> — NO Tailwind/CDN. Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
     } else {
       // DEFAULT for web: a proper MULTI-FILE project, not one big HTML.
       system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css (your real design classes), js/app.js (split into modules if helpful), and manifest.json for the PWA. Link css/styles.css and js/app.js with their exact paths. ${ENG_MULTI}`;
