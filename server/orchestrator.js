@@ -252,9 +252,16 @@ async function makePlan(t) {
   setAgent("jeremiah", { status: "thinking", task: `planning: ${t.title}` });
   addEvent({ kind: "system", text: `Jay Jay is planning "${t.title}"…`, agentId: "jeremiah", taskId: t.id });
   const subs = await planTask(t, GEMINI_MODEL);
-  for (const s of subs) createTask({ title: s.title, prompt: s.prompt, department: s.department, createdBy: "user", parentId: t.id });
+  // Create children in order, wiring each step's "after" into a real dependency
+  // so the plan runs as a pipeline (later steps get earlier steps' deliverables).
+  const created = [];
+  for (const s of subs) {
+    const deps = (typeof s.after === "number" && created[s.after]) ? [created[s.after].id] : [];
+    created.push(createTask({ title: s.title, prompt: s.prompt, department: s.department, createdBy: "user", parentId: t.id, dependsOn: deps }));
+  }
+  const chained = created.filter((c) => c.dependsOn && c.dependsOn.length).length;
   setAgent("jeremiah", { status: "command", task: "on duty" });
-  addEvent({ kind: "assign", text: `Jay Jay split "${t.title}" into ${subs.length} sub-tasks`, agentId: "jeremiah", taskId: t.id });
+  addEvent({ kind: "assign", text: `Jay Jay split "${t.title}" into ${subs.length} sub-tasks${chained ? ` (${chained} chained)` : ""}`, agentId: "jeremiah", taskId: t.id });
 }
 
 async function synthesizePlan(t, kids) {

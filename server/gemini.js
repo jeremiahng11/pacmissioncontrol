@@ -260,21 +260,22 @@ export async function planTask(task, model = null) {
     return [{ title: `Work on: ${task.title}`, prompt: task.prompt, department: task.department || null }];
   }
   const txt = await generate(
-    `You are JAY JAY, the CTO, planning how to deliver a GOAL with your team. Break it into 2-5 CONCRETE sub-tasks, each assignable to ONE department and completable by one agent in a single shot. Order them logically (research before building, build before testing). Departments: ${DEPTS}. Respond ONLY as JSON: {"subtasks":[{"title":"<=10 words","prompt":"clear instructions","department":"one of: observatory|research_lab|development|admin|security"}]}.`,
+    `You are JAY JAY, the CTO, planning how to deliver a GOAL with your team. Break it into 2-5 CONCRETE sub-tasks, each assignable to ONE department and completable by one agent in a single shot. ORDER them logically and set dependencies so later steps build on earlier ones (e.g. research before building, build before testing). For each step, "after" is the 0-based index of the earlier step it depends on (so it receives that step's output), or null if it can run independently. Departments: ${DEPTS}. Respond ONLY as JSON: {"subtasks":[{"title":"<=10 words","prompt":"clear instructions","department":"one of: observatory|research_lab|development|admin|security","after":<index or null>}]}.`,
     `GOAL: ${task.title}\n\nDETAILS: ${task.prompt}`,
     { json: true, temperature: 0.4, model }
   );
   const valid = new Set(["observatory", "research_lab", "development", "admin", "security"]);
   try {
     const p = JSON.parse(txt);
-    const subs = (p.subtasks || []).filter((s) => s && s.title).slice(0, 6).map((s) => ({
+    const subs = (p.subtasks || []).filter((s) => s && s.title).slice(0, 6).map((s, i) => ({
       title: String(s.title).slice(0, 80),
       prompt: String(s.prompt || s.title).slice(0, 2000),
       department: valid.has(s.department) ? s.department : (task.department || null),
+      after: Number.isInteger(s.after) && s.after >= 0 && s.after < i ? s.after : null, // only depend on earlier steps
     }));
     if (subs.length) return subs;
   } catch { /* fall through */ }
-  return [{ title: `Work on: ${task.title}`, prompt: task.prompt, department: task.department || null }];
+  return [{ title: `Work on: ${task.title}`, prompt: task.prompt, department: task.department || null, after: null }];
 }
 
 /* Synthesis: combine the sub-task deliverables into one final deliverable. */

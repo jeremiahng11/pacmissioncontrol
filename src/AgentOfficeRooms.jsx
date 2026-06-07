@@ -838,10 +838,11 @@ export default function AgentOffice() {
             <div style={SS.head}>
               <h1 style={SS.h1}><Gamepad2 size={20} /> CTO Agent Office {settings.paused && <span style={SS.pausedChip}>PAUSED</span>}</h1>
               <div style={SS.controls}>
-                <button onClick={() => control("dispatch")} className="mc-btn" style={{ ...SS.btn, ...SS.gold }}><Crown size={12} /> DISPATCH</button>
-                <button onClick={() => control("all_hands")} className="mc-btn" style={{ ...SS.btn, ...SS.go }}><Zap size={12} /> RESUME</button>
-                <button onClick={() => control("clock_out")} className="mc-btn" style={{ ...SS.btn, ...SS.stop }}><Power size={12} /> CLOCK OUT</button>
-                <button onClick={() => control("toggle_autonomous", { autonomous: !settings.autonomous })} className="mc-btn" style={{ ...SS.btn, ...(settings.autonomous ? SS.autoOn : SS.autoOff) }}><Bot size={12} /> AUTO {settings.autonomous ? "ON" : "OFF"}</button>
+                <button onClick={() => control("dispatch")} className="mc-btn" style={{ ...SS.btn, ...SS.gold }} title="Dispatch now — push any queued tasks to idle agents"><Crown size={12} /> DISPATCH</button>
+                {settings.paused
+                  ? <button onClick={() => control("all_hands")} className="mc-btn" style={{ ...SS.btn, ...SS.go }} title="Resume the office — agents pick up queued work again"><Zap size={12} /> RESUME</button>
+                  : <button onClick={() => control("clock_out")} className="mc-btn" style={{ ...SS.btn, ...SS.stop }} title="Clock out — pause the office; agents stop taking new tasks"><Power size={12} /> CLOCK OUT</button>}
+                <button onClick={() => control("toggle_autonomous", { autonomous: !settings.autonomous })} className="mc-btn" style={{ ...SS.btn, ...(settings.autonomous ? SS.autoOn : SS.autoOff) }} title="Self-running demo: Jay Jay invents tasks (free Flash model). Your real tasks always use Pro."><Bot size={12} /> AUTO {settings.autonomous ? "ON" : "OFF"}</button>
               </div>
             </div>
 
