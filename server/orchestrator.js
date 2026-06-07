@@ -8,7 +8,7 @@ import {
   upsertDocument, recallMemory, appendMemory, addMemoryNote, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
   recordOutcome, getStats,
 } from "./store.js";
-import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent } from "./gemini.js";
+import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent, classifyDepartment } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL, GEMINI_DAILY_BUDGET_USD } from "./config.js";
@@ -49,7 +49,9 @@ function nextTaskFor(agent) {
   if (!pool.length)
     pool = queued.filter((t) => !t.assignedTo && t.department === agent.department).sort(byAge);
   if (!pool.length)
-    pool = queued.filter((t) => !t.assignedTo && !t.department).sort(byAge);
+    // General pool is only for demo/auto tasks; user "Any" tasks are routed to a
+    // department first (routeTasks), so they reach the right specialist.
+    pool = queued.filter((t) => !t.assignedTo && !t.department && t.createdBy === "cto").sort(byAge);
   // Overflow assist: a free worker helps another department whose own agent is
   // busy. Security is excluded both ways — Warden never leaves security duty,
   // and security tasks are only ever done by Warden.
@@ -120,18 +122,17 @@ async function runTask(agent, task) {
       updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note });
       recordOutcome(true);
       deleteIssuesForTask(task.id); // it succeeded — clear any prior issues for it
-      // Sub-tasks of a plan don't make their own document — the plan's
-      // synthesized deliverable is the single output (avoids Docs/Projects clutter).
-      const parent = task.parentId ? getTasks().find((x) => x.id === task.parentId) : null;
-      const isPlanChild = !!(parent && parent.isPlan);
-      if (isUser && !isPlanChild) {
-        // Real work only: save the deliverable as a document and fold a note
-        // into the department's memory so future tasks continue the work.
-        upsertDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
+      if (isUser) {
+        // Sub-tasks of a plan don't make their own document (the plan's synthesis
+        // is the single output) — but they DO still contribute to memory.
+        const parent = task.parentId ? getTasks().find((x) => x.id === task.parentId) : null;
+        const isPlanChild = !!(parent && parent.isPlan);
+        if (!isPlanChild) upsertDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
+        // Fold a note into the department's memory (blob + embedded note) so
+        // future related tasks build on it via semantic recall.
         const note = await summarizeForMemory(agent, task, result, lightModel).catch(() => `${task.title} — completed.`);
         const label = `${(DEPARTMENTS[agent.department]?.label) || agent.department} memory`;
         appendMemory(agent.department, `- ${note}`, label, agent.name);
-        // Also store it as a structured note with an embedding for semantic recall.
         embed(note).then((vec) => addMemoryNote(agent.department, note, task.id, vec)).catch(() => {});
       }
       addEvent({ kind: "done", text: `Jay Jay ✓ ${agent.name}: ${task.title} — ${verdict.note}`, agentId: agent.id, taskId: task.id });
@@ -209,6 +210,24 @@ function maybeGenerate(agent) {
     .finally(() => generating.delete(agent.department));
 }
 
+// ---- Smart routing: send "Any department" tasks to the best specialist ----
+const routing = new Set();
+function routeTasks() {
+  for (const t of getTasks()) {
+    if (t.status !== "queued" || t.department || t.assignedTo || t.isPlan || t.parentId || t.createdBy === "cto") continue;
+    if (routing.has(t.id)) continue;
+    routing.add(t.id);
+    classifyDepartment(t, GEMINI_FLASH_MODEL || GEMINI_MODEL)
+      .then((dept) => {
+        const d = dept || "research_lab"; // default to a generalist so nothing stalls
+        updateTask(t.id, { department: d });
+        addEvent({ kind: "system", text: `Jay Jay routed "${t.title}" → ${DEPARTMENTS[d]?.label || d}`, agentId: "jeremiah", taskId: t.id });
+      })
+      .catch(() => updateTask(t.id, { department: "research_lab" }))
+      .finally(() => routing.delete(t.id));
+  }
+}
+
 // ---- Planning (orchestrator-worker): decompose a goal -> sub-tasks -> synthesize ----
 const planning = new Set();
 
@@ -258,6 +277,7 @@ async function synthesizePlan(t, kids) {
 
 async function tick() {
   if (settings.paused) return;
+  routeTasks();
   // Daily spend ceiling: pause the office when the estimated cost crosses it.
   if (GEMINI_DAILY_BUDGET_USD > 0 && getStats().estCostTotal >= GEMINI_DAILY_BUDGET_USD) {
     settings.paused = true;

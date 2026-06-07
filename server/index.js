@@ -31,7 +31,7 @@ import { toWordDoc, safeFilename } from "./wordExport.js";
 import { extractFiles, buildZip, extractCodeBlocks, langExt, mimeForExt, baseName, extOf } from "./zipExport.js";
 import { DEPARTMENTS } from "./agents.js";
 import { getAgent } from "./store.js";
-import { usingGemini } from "./gemini.js";
+import { usingGemini, embed } from "./gemini.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = join(__dirname, "..", "dist");
@@ -374,3 +374,4 @@ startScheduler();
 await app.listen({ port: PORT, host: HOST });
 console.log(`[mission-control] http://${HOST}:${PORT}  (gemini: ${usingGemini ? "live" : "simulated"})`);
 console.log(`[mission-control] models — work/plan/synthesis: ${GEMINI_MODEL} (Pro key) | review/notes/demo: ${GEMINI_FLASH_MODEL} (${GEMINI_FLASH_API_KEY ? "separate Flash key" : "same key — no Flash key set"})`);
+if (usingGemini) embed("ping").then((v) => console.log(`[rag] ${v ? `semantic memory active (${v.length}-dim embeddings)` : "embeddings unavailable — using keyword recall (set GEMINI_EMBED_MODEL?)"}`)).catch(() => {});

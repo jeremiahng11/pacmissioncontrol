@@ -219,6 +219,40 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   return out || `Done: ${task.title}.`;
 }
 
+/* Router: pick the single best department for a task (so "Any" goes to the
+   right specialist, not whoever is idle first). Flash classifier + keyword fallback. */
+const DEPT_KEYWORDS = {
+  development: ["code", "app", "api", "build", "website", "web app", "script", "program", "bug", "deploy", "frontend", "backend", "html", "python", "react", "flutter", "sql", "function", "feature", "prototype", "software", "endpoint", "library"],
+  research_lab: ["research", "report", "summary", "summarize", "brief", "write", "article", "analysis", "analyse", "analyze", "compare", "study", "document", "draft", "content", "blog", "whitepaper", "essay", "plan"],
+  observatory: ["find", "scan", "monitor", "investigate", "trends", "market", "competitor", "signal", "track", "watch", "discover", "explore", "intelligence", "landscape", "list of", "who are"],
+  security: ["security", "vulnerability", "audit", "risk", "compliance", "pentest", "threat", "secure", "privacy", "pdpa", "mas", "encrypt", "exposure", "breach", "hardening"],
+  admin: ["organize", "organise", "index", "record", "archive", "reconcile", "ledger", "catalog", "spreadsheet", "inventory", "sort", "categorize", "clean up", "format the data"],
+};
+function keywordDept(text) {
+  const low = String(text).toLowerCase();
+  let best = null, bestScore = 0;
+  for (const [d, kws] of Object.entries(DEPT_KEYWORDS)) {
+    const score = kws.reduce((s, k) => s + (low.includes(k) ? 1 : 0), 0);
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  return bestScore > 0 ? best : null;
+}
+export async function classifyDepartment(task, model = null) {
+  const text = `${task.title}\n${task.prompt || ""}`;
+  if (ai && model) {
+    try {
+      const txt = await generate(
+        "Route this task to the single best department. Reply with ONLY one of these words: observatory (research, monitoring, finding things), research_lab (writing, analysis, reports, plans), development (code, apps, APIs, anything technical), security (security, compliance, risk), admin (organizing, records, structured data).",
+        text.slice(0, 1500),
+        { model, temperature: 0 }
+      );
+      const d = String(txt || "").toLowerCase().match(/observatory|research_lab|development|security|admin/);
+      if (d) return d[0];
+    } catch { /* fall through */ }
+  }
+  return keywordDept(text);
+}
+
 /* Planner: Jay Jay breaks a goal into 2-5 department-assignable sub-tasks. */
 export async function planTask(task, model = null) {
   const DEPTS = "observatory (Scout — research/monitoring), research_lab (Scribe — writing/analysis), development (Orbit — building/coding/API tests), admin (Vault — records/organizing), security (Warden — security checks)";
