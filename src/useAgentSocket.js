@@ -50,6 +50,14 @@ export function useAgentSocket() {
         if (e.code === 4001 || e.code === 1008) { location.href = "/login"; return; }
         if (!stopped) {
           retry = Math.min(retry + 1, 6);
+          // Safety net: a few abnormal closes in a row may mean the session
+          // lapsed (e.g. a proxy stripped the 4001). Probe auth and bounce to
+          // /login — otherwise a PWA would reconnect forever on a blank shell.
+          if (retry >= 2) {
+            fetch("/api/state", { credentials: "same-origin" })
+              .then((r) => { if (r.status === 401) location.href = "/login"; })
+              .catch(() => {});
+          }
           setTimeout(connect, 400 * 2 ** retry);
         }
       };

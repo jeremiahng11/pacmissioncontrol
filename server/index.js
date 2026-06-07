@@ -347,11 +347,17 @@ await app.ready();
 app.server.on("upgrade", (req, socket, head) => {
   const { pathname } = new URL(req.url, "http://localhost");
   if (pathname !== "/ws") return socket.destroy();
-  if (!isAuthedFromHeader(req.headers.cookie, app)) {
-    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-    return socket.destroy();
-  }
-  wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  // Complete the handshake even when unauthed, then close with code 4001 so the
+  // client gets a real WS close code (a rejected handshake only yields 1006,
+  // which the client can't tell from a network blip — that left PWAs stuck on a
+  // blank app shell, reconnecting forever instead of redirecting to /login).
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    if (!isAuthedFromHeader(req.headers.cookie, app)) {
+      try { ws.close(4001, "unauthorized"); } catch { socket.destroy(); }
+      return;
+    }
+    wss.emit("connection", ws, req);
+  });
 });
 
 /* ---------- boot ---------- */
