@@ -479,7 +479,7 @@ export default function AgentOffice() {
   const [files, setFiles] = useState([]);
   const [credForm, setCredForm] = useState({ name: "", value: "" });
   const [followText, setFollowText] = useState("");
-  const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }] });
+  const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -788,11 +788,15 @@ export default function AgentOffice() {
                   </div>
                 ))}
                 <button style={SS.ghostBtn} onClick={() => setMission((m) => ({ ...m, items: [...m.items, { title: "", description: "", department: "" }] }))}><Plus size={12} /> ADD ANOTHER TASK</button>
+                <label style={SS.planToggle} title="Tasks run one after another; each gets the previous task's deliverable to build on">
+                  <input type="checkbox" checked={mission.sequential} onChange={(e) => setMission((m) => ({ ...m, sequential: e.target.checked }))} style={{ accentColor: "#a855f7" }} />
+                  Run in sequence — each task builds on the previous
+                </label>
                 <button style={SS.assignBtn} onClick={() => {
                   const tasks = mission.items.filter((it) => it.title.trim()).map((it) => ({ title: it.title.trim(), prompt: it.description.trim() || it.title.trim(), department: it.department || null }));
                   if (!tasks.length) return;
-                  createMission({ name: mission.name.trim(), tasks });
-                  setMission({ name: "", items: [{ title: "", description: "", department: "" }] });
+                  createMission({ name: mission.name.trim(), tasks, sequential: mission.sequential });
+                  setMission({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
                 }}><Plus size={13} /> LAUNCH MISSION</button>
                 <div style={SS.composeHint}>Add as many tasks as you like — each with its own description and agent. Jay Jay assigns and works the list.</div>
               </div>
@@ -818,9 +822,11 @@ export default function AgentOffice() {
                     const col = STATUS_COLOR[t.status] || "#64786d";
                     const mine = t.createdBy === "user";
                     const [sl, sc] = mine ? ["YOU", "#a855f7"] : ["AUTO", "#5e7088"];
+                    const waiting = t.status === "queued" && (t.dependsOn || []).some((id) => tasks[id] && tasks[id].status !== "done");
                     return (
                       <div key={t.id} style={SS.taskRow} onClick={() => setSelected(t.id)}>
                         <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
+                        {waiting && <span style={SS.waitTag}>WAITING</span>}
                         <span style={{ ...SS.srcBadge, color: sc, borderColor: `${sc}66`, background: `${sc}1a` }}>{sl}</span>
                         {t.priority === "high" && <span style={SS.prioHigh}>↑ HIGH</span>}
                         {t.priority === "low" && <span style={SS.prioLow}>↓ LOW</span>}
@@ -1053,6 +1059,7 @@ const SS = {
   planTag: { fontSize: 8.5, color: "#0b1020", background: "#a855f7", border: "1px solid #a855f7", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap", fontWeight: 700 },
   prioHigh: { fontSize: 8.5, color: "#fb7185", background: "rgba(251,113,133,.12)", border: "1px solid rgba(251,113,133,.45)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap", fontWeight: 700 },
   prioLow: { fontSize: 8.5, color: "#7d8aa0", background: "rgba(125,138,160,.1)", border: "1px solid rgba(125,138,160,.4)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
+  waitTag: { fontSize: 8.5, color: "#67e8f9", background: "rgba(103,232,249,.1)", border: "1px solid rgba(103,232,249,.4)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
   planToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c4b5fd", cursor: "pointer", padding: "4px 2px", userSelect: "none" },
   subRow: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: "#0a1020", border: "1px solid #1a2440", cursor: "pointer", marginBottom: 5 },
   missionItem: { display: "flex", flexDirection: "column", gap: 6, padding: 9, borderRadius: 8, border: "1px solid #1a2440", background: "#0a1020" },

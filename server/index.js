@@ -133,7 +133,9 @@ app.post("/api/missions", (req, reply) => {
   const name = String(b.name || "").trim();
   const defaultDept = b.department && VALID_DEPARTMENTS.has(b.department) ? b.department : null;
   const items = (Array.isArray(b.tasks) ? b.tasks : String(b.tasks || "").split("\n")).slice(0, 50);
+  const sequential = !!b.sequential; // run in order, each building on the previous
   const created = [];
+  let prevId = null;
   for (const it of items) {
     let title, prompt, dept;
     if (typeof it === "string") { title = it.trim(); prompt = title; dept = defaultDept; }
@@ -143,7 +145,9 @@ app.post("/api/missions", (req, reply) => {
       dept = it.department && VALID_DEPARTMENTS.has(it.department) ? it.department : defaultDept;
     }
     if (!title) continue;
-    created.push(createTask({ title, prompt: prompt || title, department: dept, createdBy: "user", mission: name || null }));
+    const t = createTask({ title, prompt: prompt || title, department: dept, createdBy: "user", mission: name || null, dependsOn: sequential && prevId ? [prevId] : [] });
+    created.push(t);
+    prevId = t.id;
   }
   if (!created.length) return reply.code(400).send({ error: "no tasks" });
   reply.code(201).send({ count: created.length });

@@ -4,7 +4,7 @@
 // When the queue is empty and autonomous mode is on, he generates fresh work.
 
 import {
-  bus, getWorkers, getTasks, setAgent, createTask, updateTask, addEvent,
+  bus, getWorkers, getTasks, getTask, setAgent, createTask, updateTask, addEvent,
   upsertDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize } from "./gemini.js";
@@ -33,10 +33,14 @@ const deptAgentBusy = (dept) => {
   return w ? busy.has(w.id) : false;
 };
 
+// A task is ready only when all its dependencies are done (missing deps count
+// as met so a deleted upstream can't deadlock it).
+const depsMet = (t) => !(t.dependsOn || []).some((id) => { const d = getTask(id); return d && d.status !== "done"; });
+
 function nextTaskFor(agent) {
   // Plan tasks are orchestrated by processPlans (decompose -> synthesize), not
-  // worked directly by an agent.
-  const queued = getTasks().filter((t) => t.status === "queued" && !t.isPlan);
+  // worked directly by an agent. Tasks waiting on dependencies are held.
+  const queued = getTasks().filter((t) => t.status === "queued" && !t.isPlan && depsMet(t));
   // Higher priority first, then oldest first.
   const RANK = { high: 0, normal: 1, low: 2 };
   const byAge = (a, b) => (RANK[a.priority] ?? 1) - (RANK[b.priority] ?? 1) || a.createdAt - b.createdAt;
@@ -83,9 +87,13 @@ async function runTask(agent, task) {
     // Tools (least-privilege per department): Development can call APIs.
     const tools = isUser ? toolsFor(agent.department) : null;
     const toolCtx = tools ? { taskId: task.id, agentId: agent.id, agentName: agent.name, credentials: getTaskCredentials(task.id) } : null;
+    // Upstream: deliverables from completed dependencies, so this step builds on them.
+    const upstream = isUser
+      ? (task.dependsOn || []).map((id) => getTask(id)).filter((d) => d && d.status === "done" && d.result).map((d) => ({ title: d.title, result: d.result }))
+      : [];
     let result;
     try {
-      result = await runWork(agent, task, memoryText, model, priorWork, media, tools, toolCtx);
+      result = await runWork(agent, task, memoryText, model, priorWork, media, tools, toolCtx, upstream);
     } catch (err) { handleError(agent, task, err); return; }
     updateTask(task.id, { status: "review", result });
 

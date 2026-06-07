@@ -134,7 +134,7 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 /* Worker performs the task, building on the department's memory.
    model=null (or no key) => simulated path: no API call, no cost. */
-export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null) {
+export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null, upstream = []) {
   if (!ai || !model) {
     await wait(1200 + Math.random() * 1800);
     return !model
@@ -153,6 +153,10 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const fixBlock = priorWork && task.reviewNotes && task.reviewNotes !== "follow-up requested"
     ? `\n\nThe previous attempt was sent back. FIX THESE GAPS specifically and return the COMPLETE corrected deliverable: ${task.reviewNotes}`
     : "";
+  const upstreamBlock = upstream && upstream.length
+    ? `\n\nUPSTREAM RESULTS — completed earlier steps you must build on (don't repeat them, continue from them):\n` +
+      upstream.map((u) => `### ${u.title}\n${String(u.result).slice(0, 6000)}`).join("\n\n")
+    : "";
   const fileBlock = media && media.length
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
     : "";
@@ -164,7 +168,7 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
     `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
     `No preamble like "Here is" — start directly with the title heading.`;
-  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${fileBlock}${codeBlock}`;
+  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}${codeBlock}`;
 
   if (tools && toolCtx) {
     const toolNote = "\n\nYou can use tools: http_request (actually call an API endpoint to test it) and request_credentials (ask the human for sandbox keys). For any secret, use a {{NAME}} placeholder. ACTUALLY run the tests with http_request and report the real responses; if you don't have a needed credential, call request_credentials and then produce a test plan noting execution is pending.";
