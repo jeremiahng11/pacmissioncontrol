@@ -30,6 +30,11 @@ export const GEMINI_DEMO_MODEL = process.env.GEMINI_DEMO_MODEL ?? GEMINI_FLASH_M
 // No key -> the office still runs, with simulated deliverables.
 export const SIMULATE = !GEMINI_API_KEY;
 
+// Optional daily spend ceiling (USD, estimated). 0 = off. When the day's
+// estimated cost crosses this, Jay Jay pauses the office until you raise it or
+// press ALL HANDS (resets at UTC midnight).
+export const GEMINI_DAILY_BUDGET_USD = Number(process.env.GEMINI_DAILY_BUDGET_USD || 0);
+
 export const TICK_MS = Number(process.env.TICK_MS || 1500);
 // OFF by default: the office only works on tasks YOU assign. Flip on with the
 // AUTO button (or AUTONOMOUS=true) for the self-running demo. Keeping it off

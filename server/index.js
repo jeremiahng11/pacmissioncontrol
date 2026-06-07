@@ -333,7 +333,7 @@ const sockets = new Set();
 const wss = new WebSocketServer({ noServer: true });
 
 const broadcast = (frame) => { for (const ws of sockets) if (ws.readyState === ws.OPEN) ws.send(frame); };
-for (const type of ["agent", "task", "event", "settings", "document", "memory", "issue", "routine"]) {
+for (const type of ["agent", "task", "event", "settings", "document", "memory", "issue", "routine", "stats"]) {
   bus.on(type, (payload) => {
     broadcast(JSON.stringify(type === "settings" ? { type, settings: payload } : { type, [type]: payload }));
   });

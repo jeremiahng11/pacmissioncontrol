@@ -24,7 +24,31 @@ const state = {
   attachments: new Map(), // id -> {id, taskId, filename, mime, data(base64), size}
   routines: new Map(), // id -> scheduled/recurring task definition
   credentials: new Map(), // taskId -> { name: value } (sandbox creds; values never sent to clients)
+  usage: null, // daily token/cost + outcome stats (set on first use)
 };
+
+/* ---------- usage / cost metrics (in-memory, resets daily at UTC midnight) ---------- */
+const todayUTC = () => { const d = new Date(); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`; };
+const freshUsage = () => ({ day: todayUTC(), pro: { calls: 0, inTok: 0, outTok: 0 }, flash: { calls: 0, inTok: 0, outTok: 0 }, tasksDone: 0, tasksFailed: 0 });
+// Rough public per-1M-token pricing (USD) — clearly an estimate, edit to taste.
+const RATES = { pro: { in: 1.25, out: 10 }, flash: { in: 0.3, out: 2.5 } };
+function rollDay() { if (!state.usage || state.usage.day !== todayUTC()) state.usage = freshUsage(); return state.usage; }
+
+export function recordUsage(model, meta) {
+  const u = rollDay();
+  const b = /flash/i.test(model || "") ? "flash" : "pro";
+  u[b].calls++;
+  u[b].inTok += meta?.promptTokenCount || 0;
+  u[b].outTok += meta?.candidatesTokenCount || (meta?.totalTokenCount ? meta.totalTokenCount - (meta.promptTokenCount || 0) : 0) || 0;
+  bus.emit("stats", getStats());
+}
+export function recordOutcome(ok) { const u = rollDay(); if (ok) u.tasksDone++; else u.tasksFailed++; bus.emit("stats", getStats()); }
+export function getStats() {
+  const u = rollDay();
+  const cost = (b) => u[b].inTok / 1e6 * RATES[b].in + u[b].outTok / 1e6 * RATES[b].out;
+  const estCostPro = cost("pro"), estCostFlash = cost("flash");
+  return { day: u.day, pro: u.pro, flash: u.flash, tasksDone: u.tasksDone, tasksFailed: u.tasksFailed, estCostPro, estCostFlash, estCostTotal: estCostPro + estCostFlash };
+}
 let eventSeq = 1;
 let pool = null;
 
@@ -380,6 +404,7 @@ export function snapshot() {
     memory: [...state.memory.values()].map(serializeMemory),
     issues: getIssues().map(serializeIssue),
     routines: [...state.routines.values()].map(serializeRoutine),
+    stats: getStats(),
   };
 }
 

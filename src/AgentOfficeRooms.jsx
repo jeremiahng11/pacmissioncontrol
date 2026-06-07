@@ -46,6 +46,8 @@ const PLACEHOLDER = {
   content:  { icon: Satellite, title: "Content",  desc: "Plan and track the content your agents produce." },
 };
 
+const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n || 0));
+
 const fmtCadence = (r) => {
   if (r.cadenceType === "interval") return r.everyMinutes >= 60 && r.everyMinutes % 60 === 0 ? `every ${r.everyMinutes / 60}h` : `every ${r.everyMinutes}m`;
   if (r.cadenceType === "daily") return `daily ${r.dailyTime} UTC`;
@@ -466,7 +468,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "", plan: false, priority: "normal" });
   const [selected, setSelected] = useState(null);
@@ -741,6 +743,19 @@ export default function AgentOffice() {
               <span style={SS.live}><span style={SS.liveDot} /> LIVE</span>
               <div style={SS.tickWrap}><div className="mc-marquee" style={SS.tickRun}>{ticker.join("   •   ")}   •   {ticker.join("   •   ")}</div></div>
             </div>
+
+            {stats && (stats.pro.calls + stats.flash.calls + stats.tasksDone + stats.tasksFailed > 0) && (
+              <div style={SS.statStrip}>
+                <span style={SS.statItem}>✓ {stats.tasksDone}</span>
+                <span style={SS.statItem}>✗ {stats.tasksFailed}</span>
+                <span style={SS.statSep}>·</span>
+                <span style={SS.statItem} title="Pro tokens today">PRO {fmtTok(stats.pro.inTok + stats.pro.outTok)} ~${stats.estCostPro.toFixed(2)}</span>
+                <span style={SS.statItem} title="Flash tokens today">FLASH {fmtTok(stats.flash.inTok + stats.flash.outTok)} ~${stats.estCostFlash.toFixed(2)}</span>
+                <span style={SS.statSep}>·</span>
+                <span style={{ ...SS.statItem, color: "#67e8f9", fontWeight: 700 }}>~${stats.estCostTotal.toFixed(2)} today</span>
+                <span style={{ ...SS.statItem, color: "#5e7088" }}>est.</span>
+              </div>
+            )}
 
             <div style={SS.cards}>
               {agents.map((a) => {
@@ -1060,6 +1075,9 @@ const SS = {
   prioHigh: { fontSize: 8.5, color: "#fb7185", background: "rgba(251,113,133,.12)", border: "1px solid rgba(251,113,133,.45)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap", fontWeight: 700 },
   prioLow: { fontSize: 8.5, color: "#7d8aa0", background: "rgba(125,138,160,.1)", border: "1px solid rgba(125,138,160,.4)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
   waitTag: { fontSize: 8.5, color: "#67e8f9", background: "rgba(103,232,249,.1)", border: "1px solid rgba(103,232,249,.4)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
+  statStrip: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "6px 12px", margin: "0 0 8px", fontSize: 10.5, color: "#9db0c8", fontFamily: MONO, background: "#0a1020", border: "1px solid #18223e", borderRadius: 8 },
+  statItem: { whiteSpace: "nowrap", letterSpacing: 0.3 },
+  statSep: { color: "#2a3550" },
   planToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c4b5fd", cursor: "pointer", padding: "4px 2px", userSelect: "none" },
   subRow: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: "#0a1020", border: "1px solid #1a2440", cursor: "pointer", marginBottom: 5 },
   missionItem: { display: "flex", flexDirection: "column", gap: 6, padding: 9, borderRadius: 8, border: "1px solid #1a2440", background: "#0a1020" },

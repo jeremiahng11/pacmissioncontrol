@@ -13,6 +13,7 @@ export function useAgentSocket() {
   const [memory, setMemory] = useState([]);
   const [issues, setIssues] = useState([]);
   const [routines, setRoutines] = useState([]);
+  const [stats, setStats] = useState(null);
   const [settings, setSettings] = useState({ paused: false, autonomous: true });
   const [gemini, setGemini] = useState(false);
   const [model, setModel] = useState("");
@@ -33,6 +34,7 @@ export function useAgentSocket() {
       setMemory(s.memory || []);
       setIssues(s.issues || []);
       setRoutines(s.routines || []);
+      if (s.stats) setStats(s.stats);
       if (s.settings) setSettings(s.settings);
       if (typeof s.gemini === "boolean") setGemini(s.gemini);
       if (typeof s.model === "string") setModel(s.model);
@@ -90,6 +92,7 @@ export function useAgentSocket() {
             if (m.routine.deleted) setRoutines((p) => p.filter((x) => x.id !== m.routine.id));
             else setRoutines((p) => { const i = p.findIndex((x) => x.id === m.routine.id); if (i < 0) return [...p, m.routine]; const n = [...p]; n[i] = m.routine; return n; });
             break;
+          case "stats": setStats(m.stats); break;
           case "settings": setSettings(m.settings); break;
           default: break;
         }
@@ -127,5 +130,5 @@ export function useAgentSocket() {
   const updateRoutine = useCallback((id, patch) => api.updateRoutine(id, patch).catch(() => {}), []);
   const deleteRoutine = useCallback((id) => api.deleteRoutine(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine };
+  return { agents, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine };
 }

@@ -6,7 +6,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL, GEMINI_FLASH_MODEL } from "./config.js";
 import { executeTool } from "./tools.js";
-import { addEvent } from "./store.js";
+import { addEvent, recordUsage } from "./store.js";
 
 // Two clients so Pro and Flash can bill on separate keys. Flash falls back to
 // the Pro key if no separate Flash key is set. Calls route by model name.
@@ -58,6 +58,7 @@ async function callModel(system, prompt, { json = false, temperature = 0.7, mode
         }),
         new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini request timed out")), TIMEOUT_MS)),
       ]);
+      try { recordUsage(model || GEMINI_MODEL, res.usageMetadata); } catch {}
       return (res.text || "").trim();
     } catch (e) {
       const msg = e?.message || String(e);
@@ -96,6 +97,7 @@ async function toolLoop(system, prompt, { model, media, tools, toolCtx }) {
   const contents = [{ role: "user", parts }];
   for (let step = 0; step < 8; step++) {
     const res = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools } }), TIMEOUT_MS);
+    try { recordUsage(model || GEMINI_MODEL, res.usageMetadata); } catch {}
     const calls = res.functionCalls;
     if (!calls || !calls.length) return (res.text || "").trim();
     contents.push({ role: "model", parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args || {} } })) });
@@ -108,6 +110,7 @@ async function toolLoop(system, prompt, { model, media, tools, toolCtx }) {
   }
   contents.push({ role: "user", parts: [{ text: "Wrap up now and produce the final deliverable from what you gathered." }] });
   const final = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), TIMEOUT_MS);
+  try { recordUsage(model || GEMINI_MODEL, final.usageMetadata); } catch {}
   return (final.text || "").trim();
 }
 

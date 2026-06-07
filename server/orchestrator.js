@@ -6,11 +6,12 @@
 import {
   bus, getWorkers, getTasks, getTask, setAgent, createTask, updateTask, addEvent,
   upsertDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
+  recordOutcome, getStats,
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
-import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL } from "./config.js";
+import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL, GEMINI_DAILY_BUDGET_USD } from "./config.js";
 
 const MAX_ATTEMPTS = 2;
 const GEN_COOLDOWN_MS = 9000; // calmer autonomous cadence when AUTO is on
@@ -106,6 +107,7 @@ async function runTask(agent, task) {
 
     if (verdict.complete) {
       updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note });
+      recordOutcome(true);
       deleteIssuesForTask(task.id); // it succeeded — clear any prior issues for it
       // Sub-tasks of a plan don't make their own document — the plan's
       // synthesized deliverable is the single output (avoids Docs/Projects clutter).
@@ -125,6 +127,7 @@ async function runTask(agent, task) {
       addEvent({ kind: "redo", text: `Jay Jay ↺ ${agent.name}: redo ${task.title} (${verdict.note})`, agentId: agent.id, taskId: task.id });
     } else {
       updateTask(task.id, { status: "failed", completedAt: Date.now(), reviewNotes: verdict.note });
+      recordOutcome(false);
       createIssue({ kind: "review", title: `"${task.title}" failed review`, detail: `${agent.name} could not satisfy the task after ${MAX_ATTEMPTS} attempts. Last review note: ${verdict.note}`, taskId: task.id, agentId: agent.id });
       addEvent({ kind: "fail", text: `Jay Jay ✗ ${agent.name}: ${task.title} failed review`, agentId: agent.id, taskId: task.id });
     }
@@ -242,6 +245,13 @@ async function synthesizePlan(t, kids) {
 
 async function tick() {
   if (settings.paused) return;
+  // Daily spend ceiling: pause the office when the estimated cost crosses it.
+  if (GEMINI_DAILY_BUDGET_USD > 0 && getStats().estCostTotal >= GEMINI_DAILY_BUDGET_USD) {
+    settings.paused = true;
+    bus.emit("settings", getSettings());
+    addEvent({ kind: "system", text: `💸 Daily budget ~$${GEMINI_DAILY_BUDGET_USD} reached — office paused. Raise GEMINI_DAILY_BUDGET_USD or press ALL HANDS (resets at UTC midnight).` });
+    return;
+  }
   processPlans();
   for (const agent of getWorkers()) {
     if (agent.status !== "idle" || busy.has(agent.id)) continue;
