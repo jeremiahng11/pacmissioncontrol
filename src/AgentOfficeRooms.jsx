@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key, Activity,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
@@ -33,7 +33,7 @@ const DEPT_OPTS = [
 
 const NAV = [
   ["Tasks", Target, "tasks"],
-  ["Content", Satellite, "content"],
+  ["Stats", Activity, "stats"],
   ["Calendar", Calendar, "calendar"],
   ["Projects", Rocket, "projects"],
   ["Memory", Brain, "memory"],
@@ -375,6 +375,74 @@ function IssuesView({ issues, byId, onResolve, onRetry, onClearAll }) {
   );
 }
 
+function StatCard({ label, value, sub, color }) {
+  return (
+    <div style={SS.statCard}>
+      <div style={{ ...SS.statCardVal, color: color || "#e8edff" }}>{value}</div>
+      <div style={SS.statCardLabel}>{label}</div>
+      {sub && <div style={SS.statCardSub}>{sub}</div>}
+    </div>
+  );
+}
+
+function StatsView({ stats, tasks, agents }) {
+  const ts = Object.values(tasks);
+  const cnt = (pred) => ts.filter(pred).length;
+  const done = cnt((t) => t.status === "done");
+  const failed = cnt((t) => ["failed", "blocked"].includes(t.status));
+  const active = cnt((t) => ["queued", "in_progress", "review", "planning"].includes(t.status));
+  const finished = done + failed;
+  const rate = finished ? Math.round((done / finished) * 100) : null;
+  const s = stats || { pro: { inTok: 0, outTok: 0, calls: 0 }, flash: { inTok: 0, outTok: 0, calls: 0 }, estCostPro: 0, estCostFlash: 0, estCostTotal: 0 };
+  const totalTok = s.pro.inTok + s.pro.outTok + s.flash.inTok + s.flash.outTok;
+  const workers = AGENTS.filter((a) => !a.cto);
+  return (
+    <div style={SS.libWrap}>
+      <h1 style={SS.h1}><Activity size={20} /> Stats</h1>
+      <div style={SS.libSub}>Live control-tower view — the team's throughput and today's spend. Token counts come from the API; dollar figures are estimates. Cost resets at UTC midnight.</div>
+
+      <div style={SS.secTitle}>OUTCOMES</div>
+      <div style={SS.statCards}>
+        <StatCard label="Done" value={done} color="#38bdf8" />
+        <StatCard label="Failed" value={failed} color="#fb5570" />
+        <StatCard label="Active" value={active} color="#4ade80" />
+        <StatCard label="Success rate" value={rate == null ? "—" : rate + "%"} color="#a855f7" />
+      </div>
+
+      <div style={SS.secTitle}>COST TODAY (EST.)</div>
+      <div style={SS.statCards}>
+        <StatCard label={`Pro · ${s.pro.calls} calls`} value={`$${s.estCostPro.toFixed(2)}`} sub={`${fmtTok(s.pro.inTok + s.pro.outTok)} tokens`} color="#facc15" />
+        <StatCard label={`Flash · ${s.flash.calls} calls`} value={`$${s.estCostFlash.toFixed(2)}`} sub={`${fmtTok(s.flash.inTok + s.flash.outTok)} tokens`} color="#67e8f9" />
+        <StatCard label="Total today" value={`$${s.estCostTotal.toFixed(2)}`} sub={`${fmtTok(totalTok)} tokens`} color="#a855f7" />
+      </div>
+
+      <div style={SS.secTitle}>TEAM</div>
+      <div style={SS.docsList}>
+        {workers.map((w) => {
+          const dt = ts.filter((t) => t.department === w.department);
+          const wd = dt.filter((t) => t.status === "done").length;
+          const wf = dt.filter((t) => ["failed", "blocked"].includes(t.status)).length;
+          const wa = dt.filter((t) => ["queued", "in_progress", "review"].includes(t.status)).length;
+          const liveA = agents.find((a) => a.id === w.id);
+          const st = liveA?.status === "working" ? "working" : liveA?.status === "thinking" ? "thinking" : "idle";
+          return (
+            <div key={w.id} style={SS.teamStatRow}>
+              <span style={{ ...SS.statDot, background: w.color }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={SS.docTitle}>{w.name} <span style={{ color: "#5e7088", fontWeight: 400 }}>· {w.role}</span></div>
+                <div style={SS.docMeta}>{st}{liveA?.task ? ` · ${liveA.task}` : ""}</div>
+              </div>
+              <span style={SS.statMini} title="done">✓ {wd}</span>
+              <span style={SS.statMini} title="active">◷ {wa}</span>
+              <span style={{ ...SS.statMini, color: wf ? "#fb5570" : "#5e7088" }} title="failed">✗ {wf}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ProjectsView({ documents, byId, onOpen, onDownload }) {
   const projects = documents.filter((d) => d.department === "development");
   return (
@@ -668,8 +736,9 @@ export default function AgentOffice() {
             <span style={{ ...SS.onDot, background: connected ? "#4ade80" : "#eab308" }} />
             {connected ? "LIVE" : "RECONNECTING"}
           </div>
-          <div style={SS.modePill}>
+          <div style={SS.modePill} title={gemini ? `Work/plan/synthesis: ${model}  ·  Review/notes/demo: ${demoModel}` : "Simulation"}>
             {gemini ? <Sparkles size={11} /> : <Bot size={11} />} {gemini ? (model || "GEMINI") : "SIMULATION"}
+            {gemini && demoModel && demoModel !== model && <span style={SS.modeSub}> + {demoModel.replace(/^gemini-/, "")}</span>}
           </div>
         </div>
 
@@ -879,6 +948,8 @@ export default function AgentOffice() {
 
         {view === "projects" && <ProjectsView documents={documents} byId={byId} onOpen={openDoc} onDownload={downloadCode} />}
 
+        {view === "stats" && <StatsView stats={stats} tasks={tasks} agents={agents} />}
+
         {view === "issues" && <IssuesView issues={issues} byId={byId} onClearAll={clearIssues} onResolve={resolveIssue} onRetry={(i) => {
           if (!i.taskId) { alert("This issue has no task to retry — dismissing it."); resolveIssue(i.id); return; }
           retryTask(i.taskId)
@@ -1019,7 +1090,8 @@ const SS = {
   brand: { fontFamily: PIX, fontSize: 12, lineHeight: 1.6, color: "#e8edff", letterSpacing: 1 },
   online: { fontSize: 9.5, display: "flex", alignItems: "center", gap: 5, letterSpacing: 1 },
   onDot: { width: 7, height: 7, borderRadius: 99, boxShadow: "0 0 6px currentColor" },
-  modePill: { fontSize: 8.5, letterSpacing: 1, color: "#9db0c8", display: "flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 99, border: "1px solid #243358", background: "#0a1020" },
+  modePill: { fontSize: 8.5, letterSpacing: 1, color: "#9db0c8", display: "flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 99, border: "1px solid #243358", background: "#0a1020", flexWrap: "wrap", justifyContent: "center" },
+  modeSub: { color: "#5e7088" },
   nav: { display: "flex", flexDirection: "column", gap: 3 },
   navItem: { display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 9, fontSize: 13, color: "#8aa0c0", cursor: "pointer", position: "relative" },
   navActive: { background: "#15203f", color: "#e8edff", border: "1px solid #243358" },
@@ -1088,6 +1160,14 @@ const SS = {
   statStrip: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "6px 12px", margin: "0 0 8px", fontSize: 10.5, color: "#9db0c8", fontFamily: MONO, background: "#0a1020", border: "1px solid #18223e", borderRadius: 8 },
   statItem: { whiteSpace: "nowrap", letterSpacing: 0.3 },
   statSep: { color: "#2a3550" },
+  statCards: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 6 },
+  statCard: { background: "#0c1226", border: "1px solid #1a2440", borderRadius: 10, padding: "12px 14px" },
+  statCardVal: { fontSize: 22, fontWeight: 800, fontFamily: MONO, lineHeight: 1.1 },
+  statCardLabel: { fontSize: 10, color: "#9db0c8", marginTop: 4, letterSpacing: 0.5 },
+  statCardSub: { fontSize: 9.5, color: "#5e7088", marginTop: 2, fontFamily: MONO },
+  teamStatRow: { display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440" },
+  statDot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
+  statMini: { fontSize: 11, color: "#9db0c8", fontFamily: MONO, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 },
   planToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c4b5fd", cursor: "pointer", padding: "4px 2px", userSelect: "none" },
   modeToggle: { display: "flex", gap: 4, padding: 3, background: "#0a1020", border: "1px solid #1a2440", borderRadius: 9, marginBottom: 2 },
   modeBtn: { flex: 1, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", color: "#8aa0c0", fontWeight: 700, fontSize: 11, letterSpacing: 0.5, cursor: "pointer", fontFamily: MONO },
