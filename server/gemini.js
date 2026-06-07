@@ -276,10 +276,11 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     ? `\n\nUPSTREAM RESULTS — completed earlier steps you must build on (don't repeat them, continue from them):\n` +
       upstream.map((u) => `### ${u.title}\n${String(u.result).slice(0, 6000)}`).join("\n\n")
     : "";
-  const fileBlock = media && media.length
-    ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
-    : "";
   const isBuild = agent.department === "development";
+  const fileBlock = media && media.length
+    ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.` +
+      (isBuild ? ` IMPORTANT: if any attachment is a DESIGN REFERENCE (a screenshot, mockup, or an HTML/CSS file), treat it as the QUALITY BAR and STYLE GUIDE — study its palette, typography, spacing, components, motion and overall polish, and MATCH or EXCEED it. Reproduce that calibre of craft (don't invent a more generic look).` : "")
+    : "";
   const docSystem =
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
     `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
