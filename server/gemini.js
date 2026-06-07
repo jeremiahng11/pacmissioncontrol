@@ -198,9 +198,12 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const fileBlock = media && media.length
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
     : "";
-  // Development tasks: emit each file with a marker so it can be zipped.
+  // Development tasks: emit a COMPLETE, WORKING project that runs as-is.
   const codeBlock = agent.department === "development"
-    ? `\n\nIf you produce a multi-file project or app, output EACH file as a marker line "===== FILE: relative/path.ext =====" immediately followed by its fenced code block, so the code can be packaged into a downloadable .zip. Keep explanations as normal prose between files.`
+    ? `\n\nDeliver a COMPLETE, WORKING project — full code, no placeholders, no "...", no "rest of the code here".` +
+      ` For a web page/app, STRONGLY PREFER a SINGLE self-contained index.html with all CSS inside a <style> tag and all JS inside a <script> tag, so it works correctly the moment it's opened (nothing to wire up).` +
+      ` If you genuinely need separate files, you MUST link them correctly using the EXACT file names — e.g. <link rel="stylesheet" href="styles.css"> and <script src="app.js"></script> — and every reference (hrefs, src, import paths) must resolve. Double-check the HTML actually loads the CSS/JS.` +
+      ` Output EACH file as a marker line "===== FILE: relative/path.ext =====" immediately followed by its fenced code block (so the files package into a downloadable .zip). Keep any explanation as short prose between files.`
     : "";
   const system =
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +

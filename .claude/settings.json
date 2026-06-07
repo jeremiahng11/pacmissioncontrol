@@ -39,7 +39,10 @@
       "Bash(perl -0pi -e 's/\\\\}\\\\\\), 60000\\\\\\)/}\\), TIMEOUT_MS\\)/g' server/gemini.js)",
       "Bash(perl -0pi -e 's/ai\\\\.models\\\\.generateContent/clientFor\\(model || GEMINI_MODEL\\).models.generateContent/g' server/gemini.js)",
       "Bash(grep -n \"routines, settings, gemini, model, demoModel, connected\\\\|view === \\\\\"visual\\\\\"\\\\|SS.ticker\\\\|<div style={SS.ticker}\" src/AgentOfficeRooms.jsx)",
-      "Bash(grep -n \"const agents\\\\b\\\\|agents = \\\\|agents}\\\\|{ agents\\\\|agents,\\\\|agents\\\\.map\\\\|agents\\\\.find\" src/AgentOfficeRooms.jsx)"
+      "Bash(grep -n \"const agents\\\\b\\\\|agents = \\\\|agents}\\\\|{ agents\\\\|agents,\\\\|agents\\\\.map\\\\|agents\\\\.find\" src/AgentOfficeRooms.jsx)",
+      "Bash(rm -rf vzip)",
+      "Bash(mkdir vzip *)",
+      "Bash(unzip -o \"/Users/jeremiah/Downloads/Visa_Card_application_and_payments_app.zip\" -d /tmp/vzip)"
     ],
     "additionalDirectories": [
       "/Users/jeremiah/Desktop",

@@ -275,7 +275,19 @@ async function synthesizePlan(t, kids) {
   setAgent("jeremiah", { status: "thinking", task: `assembling: ${t.title}` });
   addEvent({ kind: "review", text: `Jay Jay is assembling "${t.title}" from ${done.length} sub-tasks…`, agentId: "jeremiah", taskId: t.id });
   const parts = done.map((c) => ({ title: c.title, department: c.department, result: c.result }));
-  const final = await synthesize(t, parts, GEMINI_MODEL);
+  // If a sub-task produced a real code project, NEVER pass it through the LLM
+  // synthesis (that's what breaks file links). Keep the code verbatim and append
+  // the other deliverables as supporting material.
+  const hasCode = (s) => /```|=+\s*FILE:/.test(s || "");
+  const codeChild = done.find((c) => c.department === "development" && hasCode(c.result));
+  let final;
+  if (codeChild) {
+    const others = done.filter((c) => c.id !== codeChild.id);
+    final = `# ${t.title}\n\n${codeChild.result.replace(/^#\s+.*\n?/, "")}` +
+      (others.length ? `\n\n---\n\n## Supporting material\n\n` + others.map((c) => `### ${c.title} — ${DEPARTMENTS[c.department]?.label || c.department}`+`\n\n${c.result}`).join("\n\n") : "");
+  } else {
+    final = await synthesize(t, parts, GEMINI_MODEL);
+  }
   updateTask(t.id, { status: "done", result: final, completedAt: Date.now(), reviewNotes: `assembled from ${done.length} sub-tasks` });
   upsertDocument({ taskId: t.id, title: t.title, prompt: t.prompt, department: t.department || "command", agentId: "jeremiah", content: final });
   setAgent("jeremiah", { status: "command", task: "on duty" });
