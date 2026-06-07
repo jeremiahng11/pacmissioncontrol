@@ -50,6 +50,7 @@ const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" 
 const fmtTime = (ms) => { try { return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const EVENT_COLOR = { assign: "#facc15", handoff: "#67e8f9", tool: "#38bdf8", review: "#eab308", done: "#4ade80", redo: "#fb923c", fail: "#fb5570", issue: "#fb5570", system: "#9db0c8" };
 const WORK_INFO = { development: ["</>", "coding"], observatory: ["◎", "scanning"], research_lab: ["✎", "writing"], security: ["⛨", "auditing"], admin: ["▤", "sorting"], _: ["•", "working"] };
+const WORK_FX = { development: ["</>", "{ }", ";", "()", "=>"], observatory: ["✦", "·", "◦", "✧", "·"], research_lab: ["✎", "¶", "A", "“", "·"], security: ["⛨", "✓", "!", "·", "✓"], admin: ["▤", "≡", "✓", "·", "▦"], _: ["·", "·", "·"] };
 const PREVIEW_DEVICES = [["mobile", "Mobile", 390], ["mobileL", "Mobile L", 430], ["tablet", "Tablet", 768], ["desktop", "Desktop", 1280]];
 
 const fmtCadence = (r) => {
@@ -231,10 +232,10 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
         <rect x="12" y="106" width="236" height="8" rx="2" fill={c} opacity="0.5" /><rect x="20" y="114" width="5" height="20" fill={c} opacity="0.32" /><rect x="235" y="114" width="5" height="20" fill={c} opacity="0.32" />
         {/* terminal window on the desk */}
         {codeScreen(150, 84, 64, 18)}
-        {/* keyboard */}
-        <g opacity="0.6">
+        {/* keyboard — keys flash like key-presses while coding */}
+        <g opacity="0.7">
           <rect x="34" y="90" width="70" height="13" rx="2" fill="#04060d" stroke={c} strokeOpacity="0.5" />
-          {[0, 1].map((r) => [40, 49, 58, 67, 76, 85, 94].map((kx, i) => <rect key={`${r}-${i}`} x={kx - (r ? 3 : 0)} y={93 + r * 5} width="5.5" height="3" rx="1" fill={c} opacity="0.4" />))}
+          {[0, 1].map((r) => [40, 49, 58, 67, 76, 85, 94].map((kx, i) => <rect key={`${r}-${i}`} x={kx - (r ? 3 : 0)} y={93 + r * 5} width="5.5" height="3" rx="1" fill={c} opacity="0.4" className={work ? "key-flash" : ""} style={work ? { animationDelay: `${((r * 7 + i) % 6) * 0.13}s` } : undefined} />))}
         </g>
       </g>);
       break;
@@ -258,12 +259,19 @@ const Room = memo(function Room({ room, name, color, cto, status, task, departme
       <div className="room-top"><span className="room-name">{roomLabel(room)}</span><span className="room-dots"><i /><i /><i /></span></div>
       <div className="scene" style={{ height: h }}>
         <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={color} work={busy} /></svg>
-        <div className={`walker ${busy && !ctoAway && !cto ? "busy " + walk : ""}`}>
+        <div className={`walker ${!cto && !ctoAway && status === "working" ? "atwork" : (busy && !ctoAway && !cto ? "busy " + walk : "")}`}>
           {/* bubbles sit just above the agent and move with it */}
           {!cto && sayText && <div className="speech" style={{ borderColor: color, color }}>{sayText}</div>}
           {!cto && !sayText && status === "working" && <div className="work-bubble" style={{ color, borderColor: color }}>{(WORK_INFO[department] || WORK_INFO._)[0]} {(WORK_INFO[department] || WORK_INFO._)[1]}<span className="work-dots">…</span></div>}
           {!cto && !sayText && status === "thinking" && <div className="cue" style={{ color }}>?</div>}
           {!cto && !sayText && status === "idle" && <div className="cue zzz">z z z</div>}
+          {!cto && status === "working" && (
+            <div className="work-fx">
+              {(WORK_FX[department] || WORK_FX._).map((g, i) => (
+                <span key={i} className="work-particle" style={{ color, left: [-20, 18, -10, 24, 4][i % 5] + "px", animationDelay: `${i * 0.5}s` }}>{g}</span>
+              ))}
+            </div>
+          )}
           <div className="oshadow" style={ctoAway ? { opacity: 0 } : undefined} />
           {!ctoAway && <Octo color={color} size={cto ? 76 : 56} status={status} cto={cto} />}
         </div>
@@ -1518,8 +1526,17 @@ const CSS = `
 .courier-say { animation:popIn .22s ease-out; }
 @keyframes popIn { 0%{opacity:0; transform:translateX(-50%) translateY(5px) scale(.7);} 100%{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} }
 /* a soft pulse under an actively-working agent */
-.walker.busy .oshadow { animation:shadowPulse 1.3s ease-in-out infinite; }
+.walker.busy .oshadow, .walker.atwork .oshadow { animation:shadowPulse 1.3s ease-in-out infinite; }
 @keyframes shadowPulse { 0%,100%{opacity:.26; width:34px;} 50%{opacity:.5; width:42px;} }
+/* working agent: stays at the workstation with a focused typing lean */
+.walker.atwork { animation:typeLean .85s ease-in-out infinite; }
+@keyframes typeLean { 0%,100%{transform:translateX(-50%) translateY(0) rotate(0deg);} 30%{transform:translateX(-50%) translateY(1px) rotate(.8deg);} 70%{transform:translateX(-50%) translateY(-1px) rotate(-.8deg);} }
+/* work particles rising from the agent (code symbols for Orbit, etc.) */
+.work-fx { position:absolute; bottom:64%; left:50%; width:0; height:0; z-index:6; pointer-events:none; }
+.work-particle { position:absolute; bottom:0; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; white-space:nowrap; opacity:0; animation:floatUp 2.6s ease-in infinite; }
+@keyframes floatUp { 0%{opacity:0; transform:translateY(6px) scale(.7);} 22%{opacity:.95;} 100%{opacity:0; transform:translateY(-32px) scale(1.15);} }
+/* keyboard key-presses while coding */
+.key-flash { animation:keyFlash .55s ease-in-out infinite; } @keyframes keyFlash { 0%,100%{opacity:.3;} 50%{opacity:1;} }
 .mc-marquee { animation:marq 26s linear infinite; will-change:transform; } @keyframes marq { from{transform:translateX(0);} to{transform:translateX(-50%);} }
 .mc-btn:hover { filter:brightness(1.15); } .mc-btn:active { transform:scale(.97); }
 `;
