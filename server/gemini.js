@@ -181,11 +181,11 @@ const DESIGN_BAR =
 const BUILD_MAX_TOKENS = 60000;
 // The gap between a 2-3 screen sample and a real product. Be exhaustive.
 const CRAFT_BAR =
-  "SCALE & COMPLETENESS — THIS IS THE #1 MISS: a real onboarding/banking flow is 12-20+ distinct screens and is LONG (well over a thousand lines). Build the ENTIRE journey end to end — every step plus its empty / loading / success / error states — NOT a 2-3 screen sample. Write ALL the code; never stop early, never summarise, never leave '...' or 'rest of the screens here'. If you're running long, keep going — completeness beats brevity.\n" +
+  "SCALE & COMPLETENESS: a real onboarding/banking flow is 12-20+ distinct screens AND each screen is RICH (a shipping app averages 300-500 lines per screen, not 70). Build the ENTIRE journey end to end — every step plus its empty / loading / success / error states. And make every screen DENSE and real: proper headers, sub-copy, multiple components, realistic data, states and details — NOT a sparse placeholder with one heading and a button. Write ALL the code; never stop early, summarise, or leave '...'. If you're running long, keep going — depth and completeness beat brevity.\n" +
   "CRAFT (what separates pro from generic):\n" +
   "- Design tokens in :root: a DISTINCTIVE brand identity (NOT generic default blue — choose a real palette), a characterful display font for headings (e.g. a serif like Fraunces, or a strong sans) + Inter for body via a Google Fonts <link>, a shadow scale (sm/md/lg), a consistent radius.\n" +
   "- Real motion on EVERY screen change: transitions with iOS/spring easings such as cubic-bezier(0.32,0.72,0,1) and cubic-bezier(0.34,1.56,0.64,1); staggered fade-up entrances on content; animated success checkmarks; progress bars between steps; skeletons while 'loading'.\n" +
-  "- Considered layout: comfortable spacing, aligned grids, thumb-friendly targets, and absolutely no clipped or overlapping text (verify every label fits its box).";
+  "- Considered layout: comfortable spacing, aligned grids, thumb-friendly targets. Use normal flow / flex / grid — do NOT absolutely-position banners or labels on top of cards or other content (that bug — e.g. a 'Tap to activate' strip overlapping the card — is unacceptable). Verify NOTHING overlaps or clips: every label fits its box, each element has its own space.";
 const ENG_MULTI =
   "ENGINEERING: Write the FULL project — every file complete, no placeholders, no \"...\". Split into PROPER, separate files (do NOT cram everything into one file). Output EACH file as a marker line \"===== FILE: relative/path.ext =====\" immediately followed by its fenced code block, so it packages into a downloadable .zip with the correct folder structure. Every import / link / href / src / path MUST use the exact file names and resolve. Include a README.md with exact run instructions. Keep prose to a one-line intro; the deliverable is the project.";
 // CSS framework CDNs are a footgun for generated code (URL typos like
@@ -415,6 +415,16 @@ export async function runReview(task, result, model = null) {
   if (text.length < 40 || /^(i (can'?t|cannot|am unable|'?m sorry)|as an ai)\b/i.test(text)) {
     return { complete: false, note: "deliverable is empty, a refusal, or far too short" };
   }
+  // Completeness gate for web build flows: a multi-step app must actually have
+  // the screens. A thin 1-2 screen build is auto-rejected so it gets rebuilt.
+  const looksWeb = /<!doctype html|<html|class="[^"]*\bscreen\b|data-screen=/i.test(text);
+  const flowTask = /onboard|sign[- ]?up|\bapply\b|application|activat|\bkyc\b|\bflow\b|\bsteps?\b|wallet|top[- ]?up|multi[- ]?step|journey/i.test(`${task.title} ${task.prompt}`);
+  if (looksWeb && flowTask) {
+    const screens = (text.match(/class="[^"]*\b(screen|page|step|view)\b|data-screen=|id="[^"]*screen/gi) || []).length;
+    if (screens < 5) {
+      return { complete: false, note: `Incomplete flow — only ~${screens} screen(s). Build EVERY screen of the journey with working navigation: welcome → sign-up/OTP → KYC → account & currency (SGD/USD) setup → card application → card ACTIVATION + animated success → set PIN → wallet home → top-up. No overlapping elements.` };
+    }
+  }
   if (!ai || !model) {
     await wait(400 + Math.random() * 500);
     return { complete: true, note: !model ? "demo" : "approved (sim)" };
@@ -423,7 +433,7 @@ export async function runReview(task, result, model = null) {
   const txt = await generate(
     "You are JAY JAY, the CTO, doing QA on a deliverable. It's Markdown TEXT that the app exports to .doc/.zip — NEVER reject it for file format or for \"being text\". " +
       "Check three things: (1) it addresses EVERY explicit requirement in the task, (2) it's correct and on-topic, (3) it's specific and real — no placeholders, TODOs, or vague filler. " +
-      (isDev ? "For build/code tasks, the deliverable must contain actual code, not just a description. " : "") +
+      (isDev ? "For build/code tasks: the deliverable must contain actual code; and if the task describes a multi-step flow, it must implement the WHOLE journey (all screens, not just a home/dashboard) with working navigation and NO overlapping/clipped elements — mark incomplete if it's a thin 1-3 screen sample or has layout overlaps. " : "") +
       "Mark complete=false ONLY for MATERIAL problems (a missing requirement, wrong/placeholder content) — not for style or polish. " +
       "Respond ONLY as JSON: {\"complete\": boolean, \"note\": \"if incomplete: the SPECIFIC gaps to fix (<=16 words); if complete: a one-line approval\"}.",
     `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${result}`,
