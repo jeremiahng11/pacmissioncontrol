@@ -47,6 +47,8 @@ const PLACEHOLDER = {
 };
 
 const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n || 0));
+const fmtTime = (ms) => { try { return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+const EVENT_COLOR = { assign: "#facc15", handoff: "#67e8f9", tool: "#38bdf8", review: "#eab308", done: "#4ade80", redo: "#fb923c", fail: "#fb5570", issue: "#fb5570", system: "#9db0c8" };
 
 const fmtCadence = (r) => {
   if (r.cadenceType === "interval") return r.everyMinutes >= 60 && r.everyMinutes % 60 === 0 ? `every ${r.everyMinutes / 60}h` : `every ${r.everyMinutes}m`;
@@ -1017,6 +1019,24 @@ export default function AgentOffice() {
             <div style={SS.secTitle}>{["failed", "blocked"].includes(selectedTask.status) ? "PARTIAL WORK SO FAR" : "DELIVERABLE"}</div>
             <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
             {selectedTask.reviewNotes && !["failed", "blocked"].includes(selectedTask.status) && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
+            {(() => {
+              const evs = events.filter((e) => e.taskId === selectedTask.id).slice().sort((a, b) => a.id - b.id);
+              if (!evs.length) return null;
+              return (
+                <>
+                  <div style={SS.secTitle}>ACTIVITY</div>
+                  <div style={SS.timeline}>
+                    {evs.map((e) => (
+                      <div key={e.id} style={SS.tlRow}>
+                        <span style={{ ...SS.tlDot, background: EVENT_COLOR[e.kind] || "#64786d" }} />
+                        <span style={SS.tlText}>{e.text}</span>
+                        <span style={SS.tlTime}>{fmtTime(e.ts)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
             {(selectedTask.department === "development" || (selectedTask.credentialNames && selectedTask.credentialNames.length > 0)) && (
               <>
                 <div style={SS.secTitle}>SANDBOX CREDENTIALS</div>
@@ -1168,6 +1188,11 @@ const SS = {
   teamStatRow: { display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440" },
   statDot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
   statMini: { fontSize: 11, color: "#9db0c8", fontFamily: MONO, fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 },
+  timeline: { display: "flex", flexDirection: "column", gap: 5, maxHeight: "22vh", overflowY: "auto", marginTop: 2, paddingLeft: 2 },
+  tlRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#bcd0e8" },
+  tlDot: { width: 7, height: 7, borderRadius: "50%", flexShrink: 0 },
+  tlText: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  tlTime: { fontSize: 9.5, color: "#5e7088", fontFamily: MONO, flexShrink: 0 },
   planToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c4b5fd", cursor: "pointer", padding: "4px 2px", userSelect: "none" },
   modeToggle: { display: "flex", gap: 4, padding: 3, background: "#0a1020", border: "1px solid #1a2440", borderRadius: 9, marginBottom: 2 },
   modeBtn: { flex: 1, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", color: "#8aa0c0", fontWeight: 700, fontSize: 11, letterSpacing: 0.5, cursor: "pointer", fontFamily: MONO },
