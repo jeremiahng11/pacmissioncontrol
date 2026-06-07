@@ -149,6 +149,10 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const priorBlock = priorWork
     ? `\n\nPREVIOUS DELIVERABLE (continue from it — keep what's good, apply the changes, and return the COMPLETE updated result):\n${String(priorWork).slice(-16000)}`
     : "";
+  // On a re-do, the CTO's review note lists the specific gaps to fix.
+  const fixBlock = priorWork && task.reviewNotes && task.reviewNotes !== "follow-up requested"
+    ? `\n\nThe previous attempt was sent back. FIX THESE GAPS specifically and return the COMPLETE corrected deliverable: ${task.reviewNotes}`
+    : "";
   const fileBlock = media && media.length
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
     : "";
@@ -160,7 +164,7 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
     `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
     `No preamble like "Here is" — start directly with the title heading.`;
-  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fileBlock}${codeBlock}`;
+  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${fileBlock}${codeBlock}`;
 
   if (tools && toolCtx) {
     const toolNote = "\n\nYou can use tools: http_request (actually call an API endpoint to test it) and request_credentials (ask the human for sandbox keys). For any secret, use a {{NAME}} placeholder. ACTUALLY run the tests with http_request and report the real responses; if you don't have a needed credential, call request_credentials and then produce a test plan noting execution is pending.";
@@ -225,20 +229,28 @@ export async function summarizeForMemory(agent, task, result, model = null) {
 /* CTO reviews the deliverable. Throws on API error (-> Issue); a bad/parse
    response just defaults to approved rather than blocking the pipeline. */
 export async function runReview(task, result, model = null) {
+  // Deterministic guard: empty / refusal / stub never passes.
+  const text = String(result || "").trim();
+  if (text.length < 40 || /^(i (can'?t|cannot|am unable|'?m sorry)|as an ai)\b/i.test(text)) {
+    return { complete: false, note: "deliverable is empty, a refusal, or far too short" };
+  }
   if (!ai || !model) {
     await wait(400 + Math.random() * 500);
     return { complete: true, note: !model ? "demo" : "approved (sim)" };
   }
+  const isDev = task.department === "development";
   const txt = await generate(
-    "You are JAY JAY, the CTO, reviewing a deliverable. The deliverable is Markdown TEXT; the user can download it as a Word (.doc) file from the app. " +
-      "Judge ONLY whether the CONTENT substantively completes the task. Do NOT reject it for file format, for \"not being a .doc/.pdf/Word file\", or for being text — formatting/export is handled by the app. " +
-      "Approve (complete=true) unless the content is clearly wrong, off-topic, or materially incomplete. Respond ONLY as JSON: {\"complete\": boolean, \"note\": string up to 12 words}.",
+    "You are JAY JAY, the CTO, doing QA on a deliverable. It's Markdown TEXT that the app exports to .doc/.zip — NEVER reject it for file format or for \"being text\". " +
+      "Check three things: (1) it addresses EVERY explicit requirement in the task, (2) it's correct and on-topic, (3) it's specific and real — no placeholders, TODOs, or vague filler. " +
+      (isDev ? "For build/code tasks, the deliverable must contain actual code, not just a description. " : "") +
+      "Mark complete=false ONLY for MATERIAL problems (a missing requirement, wrong/placeholder content) — not for style or polish. " +
+      "Respond ONLY as JSON: {\"complete\": boolean, \"note\": \"if incomplete: the SPECIFIC gaps to fix (<=16 words); if complete: a one-line approval\"}.",
     `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${result}`,
     { json: true, temperature: 0.2, model }
   );
   try {
     const p = JSON.parse(txt);
-    return { complete: !!p.complete, note: String(p.note || "").slice(0, 120) || "reviewed" };
+    return { complete: !!p.complete, note: String(p.note || "").slice(0, 160) || "reviewed" };
   } catch {
     return { complete: true, note: "approved" };
   }
