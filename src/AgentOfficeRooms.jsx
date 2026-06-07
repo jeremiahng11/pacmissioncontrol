@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key, Activity,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key, Activity, Search,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
@@ -554,6 +554,8 @@ export default function AgentOffice() {
   const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
   const [composeMode, setComposeMode] = useState("task");
   const [toasts, setToasts] = useState([]);
+  const [palette, setPalette] = useState(false);
+  const [pq, setPq] = useState("");
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -581,6 +583,13 @@ export default function AgentOffice() {
   const taskList = Object.values(tasks).sort((a, b) => b.createdAt - a.createdAt);
   const activeTasks = taskList.filter((t) => ["queued", "in_progress", "review"].includes(t.status));
   const selectedTask = selected ? tasks[selected] : null;
+
+  // Command-palette search hits (across tasks, docs, memory).
+  const pqLower = pq.trim().toLowerCase();
+  const searching = palette && pqLower.length >= 2;
+  const taskHits = searching ? taskList.filter((t) => `${t.title} ${t.prompt || ""}`.toLowerCase().includes(pqLower)).slice(0, 6) : [];
+  const docHits = searching ? documents.filter((d) => `${d.title} ${d.snippet || ""}`.toLowerCase().includes(pqLower)).slice(0, 6) : [];
+  const memHits = searching ? memory.flatMap((m) => (m.content || "").split("\n").filter((l) => l.trim() && l.toLowerCase().includes(pqLower)).map((l) => ({ scope: m.scope, line: l.trim() }))).slice(0, 6) : [];
 
   const onPick = useCallback((department) => setForm((f) => ({ ...f, department })), []);
   const openDoc = useCallback((id) => { openDocument(id).then(setDoc).catch(() => {}); }, [openDocument]);
@@ -660,6 +669,16 @@ export default function AgentOffice() {
     }
     if (jayQueue.current.length > 5) jayQueue.current = jayQueue.current.slice(-5);
   }, [events]);
+
+  // Command palette: ⌘K / Ctrl+K to open global search, Esc to close.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPq(""); setPalette((p) => !p); }
+      else if (e.key === "Escape") setPalette(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Toasts: notify when one of YOUR tasks completes or fails (any page).
   const toastEvtRef = useRef(0);
@@ -764,6 +783,9 @@ export default function AgentOffice() {
         </div>
 
         <nav style={SS.nav}>
+          <div style={SS.searchBtn} onClick={() => { setPq(""); setPalette(true); }}>
+            <Search size={15} /> <span style={{ flex: 1 }}>Search…</span><span style={SS.searchKbd}>⌘K</span>
+          </div>
           {NAV.map(([label, Icon, key]) => {
             const active = view === key;
             return (
@@ -981,6 +1003,43 @@ export default function AgentOffice() {
         {PLACEHOLDER[view] && <Placeholder icon={PLACEHOLDER[view].icon} title={PLACEHOLDER[view].title} desc={PLACEHOLDER[view].desc} />}
       </main>
 
+      {palette && (
+        <div style={{ ...SS.modalBg, alignItems: "flex-start", paddingTop: "12vh" }} onClick={() => setPalette(false)}>
+          <div style={SS.palette} onClick={(e) => e.stopPropagation()}>
+            <div style={SS.paletteTop}>
+              <Search size={15} style={{ color: "#5e7088", flexShrink: 0 }} />
+              <input autoFocus style={SS.paletteInput} placeholder="Search tasks, documents, memory…" value={pq} onChange={(e) => setPq(e.target.value)} />
+              <span style={SS.paletteKbd}>ESC</span>
+            </div>
+            <div style={SS.paletteBody}>
+              {!searching && <div style={SS.queueEmpty}>Type to search across tasks, documents, and memory.</div>}
+              {searching && taskHits.length + docHits.length + memHits.length === 0 && <div style={SS.queueEmpty}>No matches for “{pq.trim()}”.</div>}
+              {taskHits.length > 0 && <div style={SS.secTitle}>TASKS</div>}
+              {taskHits.map((t) => (
+                <div key={t.id} style={SS.paletteRow} onClick={() => { setSelected(t.id); setPalette(false); }}>
+                  <span style={{ ...SS.pill, color: STATUS_COLOR[t.status], borderColor: `${STATUS_COLOR[t.status]}66`, background: `${STATUS_COLOR[t.status]}1a` }}>{STATUS_LABEL[t.status]}</span>
+                  <span style={SS.tlText}>{t.title}</span>
+                </div>
+              ))}
+              {docHits.length > 0 && <div style={SS.secTitle}>DOCUMENTS</div>}
+              {docHits.map((d) => (
+                <div key={d.id} style={SS.paletteRow} onClick={() => { openDoc(d.id); setPalette(false); }}>
+                  <FileText size={13} style={{ color: "#38bdf8", flexShrink: 0 }} />
+                  <span style={SS.tlText}>{d.title}</span>
+                </div>
+              ))}
+              {memHits.length > 0 && <div style={SS.secTitle}>MEMORY</div>}
+              {memHits.map((h, i) => (
+                <div key={i} style={SS.paletteRow} onClick={() => { setView("memory"); setPalette(false); }}>
+                  <Brain size={13} style={{ color: "#c4b5fd", flexShrink: 0 }} />
+                  <span style={SS.tlText}>{h.line.replace(/^-\s*/, "")}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {toasts.length > 0 && (
         <div style={SS.globalToasts}>
           {toasts.map((t) => (
@@ -1166,6 +1225,14 @@ const SS = {
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
   toastWrap: { position: "fixed", right: 18, bottom: 18, zIndex: 60, display: "flex", flexDirection: "column-reverse", gap: 8, width: 340, maxWidth: "calc(100vw - 36px)" },
   globalToasts: { position: "fixed", right: 18, bottom: 18, zIndex: 80, display: "flex", flexDirection: "column-reverse", gap: 8, width: 340, maxWidth: "calc(100vw - 36px)" },
+  searchBtn: { display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", marginBottom: 6, borderRadius: 9, border: "1px solid #1a2440", background: "#0a1020", color: "#8aa0c0", cursor: "pointer", fontSize: 12.5 },
+  searchKbd: { fontSize: 9, color: "#5e7088", border: "1px solid #243358", borderRadius: 5, padding: "1px 5px", fontFamily: MONO },
+  palette: { width: 560, maxWidth: "calc(100vw - 32px)", background: "#0b1020", border: "1px solid #243358", borderRadius: 14, boxShadow: "0 24px 60px rgba(0,0,0,.6)", overflow: "hidden", display: "flex", flexDirection: "column" },
+  paletteTop: { display: "flex", alignItems: "center", gap: 9, padding: "12px 14px", borderBottom: "1px solid #18223e" },
+  paletteInput: { flex: 1, minWidth: 0, background: "transparent", border: "none", outline: "none", color: "#e8edff", fontFamily: MONO, fontSize: 14 },
+  paletteKbd: { fontSize: 9, color: "#5e7088", border: "1px solid #243358", borderRadius: 5, padding: "2px 6px", fontFamily: MONO, flexShrink: 0 },
+  paletteBody: { display: "flex", flexDirection: "column", gap: 4, padding: 10, maxHeight: "52vh", overflowY: "auto" },
+  paletteRow: { display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 8, cursor: "pointer", background: "#0c1226", border: "1px solid #141d36" },
   taskToast: { display: "flex", alignItems: "center", gap: 9, fontSize: 12, color: "#e8edff", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 12px", boxShadow: "0 12px 32px rgba(0,0,0,.55)", cursor: "pointer" },
   autoBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.12)", border: "1px solid rgba(234,179,8,.4)", borderRadius: 10, padding: "10px 12px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.45)" },
   idleBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#cfe3d8", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 13px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.5)" },
