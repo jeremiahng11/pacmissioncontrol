@@ -4,8 +4,9 @@
 // office still runs end-to-end.
 
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL } from "./config.js";
+import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL, GEMINI_FLASH_MODEL } from "./config.js";
 import { executeTool } from "./tools.js";
+import { addEvent } from "./store.js";
 
 // Two clients so Pro and Flash can bill on separate keys. Flash falls back to
 // the Pro key if no separate Flash key is set. Calls route by model name.
@@ -23,7 +24,23 @@ function isRateLimit(msg) {
 // a hung call can't freeze an agent forever. Override with GEMINI_TIMEOUT_MS.
 const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 150000);
 
-async function generate(system, prompt, { json = false, temperature = 0.7, model, media } = {}) {
+// Errors that mean "this model/key can't serve the request" — quota, billing,
+// bad model, permission. For these we fall back from Pro to Flash so the office
+// keeps working instead of blocking.
+const FALLBACKABLE = (msg) =>
+  /429|RESOURCE_EXHAUSTED|quota|limit:\s*0|PerDay|FreeTier|not found|INVALID_ARGUMENT|unexpected model|unsupported|PERMISSION_DENIED|\b40[13]\b/i.test(msg);
+let lastFallbackNote = 0;
+function noteFallback(fromModel, msg) {
+  console.warn(`[gemini] ${fromModel} failed (${String(msg).slice(0, 80)}) — falling back to ${GEMINI_FLASH_MODEL}`);
+  const now = Date.now();
+  if (now - lastFallbackNote > 60000) { // throttle the user-facing notice
+    lastFallbackNote = now;
+    try { addEvent({ kind: "system", text: `⚠️ Pro (${GEMINI_MODEL}) unavailable — falling back to ${GEMINI_FLASH_MODEL}. Enable billing on the Pro key for full quality.` }); } catch {}
+  }
+}
+const canFallback = (model, msg) => !/flash/i.test(model || "") && !!aiFlash && !!GEMINI_FLASH_MODEL && FALLBACKABLE(msg);
+
+async function callModel(system, prompt, { json = false, temperature = 0.7, model, media } = {}) {
   const contents = media && media.length
     ? [{ role: "user", parts: [{ text: prompt }, ...media.map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))] }]
     : prompt;
@@ -58,10 +75,23 @@ async function generate(system, prompt, { json = false, temperature = 0.7, model
   }
 }
 
+// Wrapper: run on the requested model; if Pro hits quota/billing/availability,
+// transparently retry on Flash so work keeps flowing.
+async function generate(system, prompt, opts = {}) {
+  const model = opts.model || GEMINI_MODEL;
+  try {
+    return await callModel(system, prompt, { ...opts, model });
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (canFallback(model, msg)) { noteFallback(model, msg); return await callModel(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL }); }
+    throw e;
+  }
+}
+
 // Tool-use loop: lets an agent call tools (e.g. http_request to test an API),
 // feeding results back until it produces the final deliverable.
 const withTimeout = (p, ms = TIMEOUT_MS) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini request timed out")), ms))]);
-async function generateWithTools(system, prompt, { model, media, tools, toolCtx }) {
+async function toolLoop(system, prompt, { model, media, tools, toolCtx }) {
   const parts = [{ text: prompt }, ...(media || []).map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))];
   const contents = [{ role: "user", parts }];
   for (let step = 0; step < 8; step++) {
@@ -79,6 +109,18 @@ async function generateWithTools(system, prompt, { model, media, tools, toolCtx 
   contents.push({ role: "user", parts: [{ text: "Wrap up now and produce the final deliverable from what you gathered." }] });
   const final = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), TIMEOUT_MS);
   return (final.text || "").trim();
+}
+
+// Same Pro->Flash fallback for the tool-using path (Development agents).
+async function generateWithTools(system, prompt, opts = {}) {
+  const model = opts.model || GEMINI_MODEL;
+  try {
+    return await toolLoop(system, prompt, { ...opts, model });
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (canFallback(model, msg)) { noteFallback(model, msg); return await toolLoop(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL }); }
+    throw e;
+  }
 }
 
 const SIM = {
