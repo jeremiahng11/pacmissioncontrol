@@ -171,7 +171,10 @@ const SIM = {
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 const DESIGN_BAR =
-  "DESIGN BAR (aim for top-fintech polish — Revolut / Wise / Monzo): a deliberate colour palette, gradients, soft shadows, generous spacing, clear type hierarchy, rounded corners, and smooth transitions / micro-interactions. Mobile-first where relevant (realistic phone frame ~390px wide, safe-area padding). NEVER use broken external image links — use inline SVG, CSS gradients, or emoji. For a payment/credit card, render a realistic card (gradient, EMV chip, contactless glyph, masked number, holder name, expiry, Visa/Mastercard mark, ~1.586:1). Build every screen the flow implies with working navigation.";
+  "DESIGN BAR (aim for top-fintech polish — Revolut / Wise / Monzo): a deliberate colour palette, gradients, soft shadows, generous spacing, clear type hierarchy, rounded corners, and smooth transitions / micro-interactions. " +
+  "MOBILE: build the app so it IS the mobile screen — it fills the viewport (100% width & height, responsive) and looks exactly like the real running app on a phone, with safe-area padding. " +
+  "Do NOT wrap it in a decorative phone/device frame, bezel, notch, rounded-phone outline, or fake status bar — no phone mockup chrome. (On a wide desktop you MAY centre it in a plain mobile-width column ~430px max, but with NO device frame around it.) " +
+  "NEVER use broken external image links — use inline SVG, CSS gradients, or emoji. For a payment/credit card, render a realistic card (gradient, EMV chip, contactless glyph, masked number, holder name, expiry, Visa/Mastercard mark, ~1.586:1). Build every screen the flow implies with working navigation.";
 const ENG_MULTI =
   "ENGINEERING: Write the FULL project — every file complete, no placeholders, no \"...\". Split into PROPER, separate files (do NOT cram everything into one file). Output EACH file as a marker line \"===== FILE: relative/path.ext =====\" immediately followed by its fenced code block, so it packages into a downloadable .zip with the correct folder structure. Every import / link / href / src / path MUST use the exact file names and resolve. Include a README.md with exact run instructions. Keep prose to a one-line intro; the deliverable is the project.";
 // The #1 reason generated UIs look broken: inventing Tailwind colour/font
