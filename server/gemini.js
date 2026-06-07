@@ -4,7 +4,7 @@
 // office still runs end-to-end.
 
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL, GEMINI_FLASH_MODEL } from "./config.js";
+import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL, GEMINI_FLASH_MODEL, GEMINI_EMBED_MODEL } from "./config.js";
 import { executeTool } from "./tools.js";
 import { addEvent, recordUsage } from "./store.js";
 
@@ -123,6 +123,21 @@ async function generateWithTools(system, prompt, opts = {}) {
     const msg = e?.message || String(e);
     if (canFallback(model, msg)) { noteFallback(model, msg); return await toolLoop(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL }); }
     throw e;
+  }
+}
+
+// Embed text for semantic memory (RAG). Uses the Flash key (cheap). Returns a
+// vector, or null if embeddings are unavailable (callers fall back to keywords).
+export async function embed(text) {
+  const client = aiFlash || aiPro;
+  if (!client) return null;
+  try {
+    const res = await withTimeout(client.models.embedContent({ model: GEMINI_EMBED_MODEL, contents: String(text || "").slice(0, 8000) }), 20000);
+    const v = res?.embeddings?.[0]?.values || res?.embedding?.values || res?.embeddings?.values || null;
+    return Array.isArray(v) && v.length ? v : null;
+  } catch (e) {
+    console.warn("[gemini] embed failed:", e?.message);
+    return null;
   }
 }
 

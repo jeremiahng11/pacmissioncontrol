@@ -25,6 +25,7 @@ const state = {
   routines: new Map(), // id -> scheduled/recurring task definition
   credentials: new Map(), // taskId -> { name: value } (sandbox creds; values never sent to clients)
   usage: null, // daily token/cost + outcome stats (set on first use)
+  memNotes: [], // structured memory notes {id, scope, text, embedding, taskId, createdAt} for semantic recall
 };
 
 /* ---------- usage / cost metrics (in-memory, resets daily at UTC midnight) ---------- */
@@ -143,7 +144,7 @@ export async function initStore() {
   await loadAgents();
   // Issues are session-scoped (in-memory) on purpose — not reloaded from the DB,
   // so a dismissed/cleared issue can never resurrect on restart.
-  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadAttachments(); await loadRoutines(); await loadCredentials(); }
+  if (pool) { await loadTasks(); await loadDocuments(); await loadMemory(); await loadAttachments(); await loadRoutines(); await loadCredentials(); await loadMemNotes(); }
   if (pool) pool.query("DELETE FROM issues").catch(() => {}); // clear any stale persisted issues
   console.log(`[store] ready (${pool ? "postgres" : "in-memory"})`);
 }
@@ -205,6 +206,11 @@ async function migrate() {
     CREATE TABLE IF NOT EXISTS task_credentials (
       task_id text, name text, value text, PRIMARY KEY (task_id, name)
     );
+    CREATE TABLE IF NOT EXISTS mem_notes (
+      id text PRIMARY KEY, scope text, text text, embedding text,
+      task_id text, created_at timestamptz DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_mem_notes_scope ON mem_notes(scope);
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS prior_work text;
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id text;
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS mission text;
@@ -244,6 +250,14 @@ async function loadAttachments() {
   // Load metadata only (data is fetched on demand) for tasks still around.
   const { rows } = await pool.query("SELECT id, task_id, filename, mime, data, size FROM attachments");
   for (const r of rows) state.attachments.set(r.id, { id: r.id, taskId: r.task_id, filename: r.filename, mime: r.mime, data: r.data, size: r.size });
+}
+async function loadMemNotes() {
+  const { rows } = await pool.query("SELECT id, scope, text, embedding, task_id, created_at FROM mem_notes ORDER BY created_at");
+  state.memNotes = rows.map((r) => ({
+    id: r.id, scope: r.scope, text: r.text, taskId: r.task_id,
+    createdAt: new Date(r.created_at).getTime(),
+    embedding: (() => { try { return r.embedding ? JSON.parse(r.embedding) : null; } catch { return null; } })(),
+  }));
 }
 async function loadCredentials() {
   const { rows } = await pool.query("SELECT task_id, name, value FROM task_credentials");
@@ -552,19 +566,61 @@ export function deleteDocument(id) {
 /* ---------- memory (rolling knowledge base per department) ---------- */
 export const getMemoryText = (scope) => state.memory.get(scope)?.content || "";
 
-// Retrieval: instead of dumping the whole (growing) memory into every prompt,
-// return the notes most RELEVANT to the task (keyword overlap), with ties broken
-// by recency. With no query match it falls back to the most recent notes.
+/* ---------- semantic memory (RAG) ---------- */
 const MEM_STOP = new Set("this that these those with from your you our their have been will would should could about into over under more most very just than then them they what task agent provide using used make made create build report note notes work done complete completed result the and for".split(" "));
-export function recallMemory(scope, query = "", limit = 8) {
+function cosine(a, b) {
+  if (!a || !b || a.length !== b.length) return -1;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-9);
+}
+
+// Store a memory note with its (optional) embedding for later semantic recall.
+export function addMemoryNote(scope, text, taskId = null, embedding = null) {
+  const note = { id: randomUUID(), scope, text: String(text).slice(0, 1000), taskId, createdAt: Date.now(), embedding: Array.isArray(embedding) ? embedding : null };
+  state.memNotes.push(note);
+  // Keep memory bounded per scope (most recent 400 notes).
+  const same = state.memNotes.filter((n) => n.scope === scope);
+  if (same.length > 400) { const drop = same[0]; state.memNotes = state.memNotes.filter((n) => n.id !== drop.id); if (pool) pool.query("DELETE FROM mem_notes WHERE id=$1", [drop.id]).catch(() => {}); }
+  if (pool) pool.query(
+    "INSERT INTO mem_notes (id,scope,text,embedding,task_id,created_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING",
+    [note.id, scope, note.text, note.embedding ? JSON.stringify(note.embedding) : null, taskId, new Date(note.createdAt)]
+  ).catch((e) => console.error("[store] addMemoryNote", e.message));
+  return note;
+}
+
+// Keyword + recency retrieval over the per-department blob (fallback path).
+function recallByKeyword(scope, query = "", limit = 8) {
   const m = state.memory.get(scope);
   if (!m || !m.content) return "";
   const notes = m.content.split("\n").map((s) => s.trim()).filter(Boolean);
   if (notes.length <= limit) return notes.join("\n");
   const words = [...new Set(String(query).toLowerCase().match(/[a-z0-9]{4,}/g) || [])].filter((w) => !MEM_STOP.has(w));
   const scored = notes.map((n, i) => ({ n, i, rel: words.reduce((s, w) => s + (n.toLowerCase().includes(w) ? 1 : 0), 0) }));
-  scored.sort((a, b) => b.rel - a.rel || b.i - a.i); // most relevant, then most recent
-  return scored.slice(0, limit).sort((a, b) => a.i - b.i).map((s) => s.n).join("\n"); // output chronologically
+  scored.sort((a, b) => b.rel - a.rel || b.i - a.i);
+  return scored.slice(0, limit).sort((a, b) => a.i - b.i).map((s) => s.n).join("\n");
+}
+
+// Semantic recall: rank a scope's notes by cosine similarity to the query
+// embedding (with a light recency tiebreak). Falls back to keyword/recency when
+// embeddings aren't available. `queryEmbedding` is computed by the caller.
+export function recallMemory(scope, query = "", queryEmbedding = null, limit = 8) {
+  const out = [];
+  const seen = new Set();
+  const add = (t) => { const k = String(t).replace(/^-\s*/, "").trim().toLowerCase(); if (k && !seen.has(k) && out.length < limit) { seen.add(k); out.push(String(t).replace(/^-\s*/, "").trim()); } };
+  // 1) Semantic: rank embedded notes by cosine similarity (+ light recency).
+  const notes = state.memNotes.filter((n) => n.scope === scope && Array.isArray(n.embedding));
+  if (queryEmbedding && notes.length) {
+    const minT = Math.min(...notes.map((n) => n.createdAt));
+    const span = (Math.max(...notes.map((n) => n.createdAt)) - minT) || 1;
+    notes.map((n) => { const c = cosine(queryEmbedding, n.embedding); return { n, c, s: c + 0.04 * ((n.createdAt - minT) / span) }; })
+      .filter((x) => x.c >= 0.25) // drop clearly-unrelated notes
+      .sort((a, b) => b.s - a.s).slice(0, limit).forEach((x) => add(x.n.text));
+  }
+  // 2) Fill remaining slots from the legacy blob (keyword/recency), de-duped —
+  //    so pre-RAG memory and sparse scopes still contribute.
+  if (out.length < limit) recallByKeyword(scope, query, limit).split("\n").forEach(add);
+  return out.join("\n");
 }
 export function deleteMemory(scope) {
   if (!state.memory.has(scope)) return false;

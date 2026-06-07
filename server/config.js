@@ -26,6 +26,8 @@ export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
 // Light model for high-frequency, low-stakes orchestration: review, one-line
 // memory notes, and the AUTO demo. Cheap + fast. Set "" to simulate AUTO.
 export const GEMINI_FLASH_MODEL = process.env.GEMINI_FLASH_MODEL || "gemini-2.5-flash";
+// Embedding model for semantic memory (RAG). Cheap; billed on the Flash key.
+export const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "text-embedding-004";
 export const GEMINI_DEMO_MODEL = process.env.GEMINI_DEMO_MODEL ?? GEMINI_FLASH_MODEL;
 // No key -> the office still runs, with simulated deliverables.
 export const SIMULATE = !GEMINI_API_KEY;

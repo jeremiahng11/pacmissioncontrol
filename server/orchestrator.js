@@ -5,10 +5,10 @@
 
 import {
   bus, getWorkers, getTasks, getTask, setAgent, createTask, updateTask, addEvent,
-  upsertDocument, recallMemory, appendMemory, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
+  upsertDocument, recallMemory, appendMemory, addMemoryNote, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
   recordOutcome, getStats,
 } from "./store.js";
-import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize } from "./gemini.js";
+import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL, GEMINI_DAILY_BUDGET_USD } from "./config.js";
@@ -75,9 +75,13 @@ async function runTask(agent, task) {
     const lightModel = isUser ? (GEMINI_FLASH_MODEL || model) : model;
 
     setAgent(agent.id, { status: "working", task: task.title });
-    // Retrieve only the memory notes relevant to this task (keeps prompts lean
-    // and on-point as a department's memory grows).
-    const memoryText = isUser ? recallMemory(agent.department, `${task.title} ${task.prompt}`) : "";
+    // Semantic recall: embed the task, pull the most relevant memory notes
+    // (keeps prompts lean + on-point as a department's memory grows).
+    let memoryText = "";
+    if (isUser) {
+      const qvec = await embed(`${task.title} ${task.prompt}`).catch(() => null);
+      memoryText = recallMemory(agent.department, `${task.title} ${task.prompt}`, qvec, 8);
+    }
     // Any output from a prior attempt becomes context so the agent CONTINUES
     // the work instead of starting cold (re-queues and manual "Continue").
     const priorWork = isUser ? (task.result || task.priorWork || null) : null;
@@ -122,6 +126,8 @@ async function runTask(agent, task) {
         const note = await summarizeForMemory(agent, task, result, lightModel).catch(() => `${task.title} — completed.`);
         const label = `${(DEPARTMENTS[agent.department]?.label) || agent.department} memory`;
         appendMemory(agent.department, `- ${note}`, label, agent.name);
+        // Also store it as a structured note with an embedding for semantic recall.
+        embed(note).then((vec) => addMemoryNote(agent.department, note, task.id, vec)).catch(() => {});
       }
       addEvent({ kind: "done", text: `Jay Jay ✓ ${agent.name}: ${task.title} — ${verdict.note}`, agentId: agent.id, taskId: task.id });
     } else if ((task.attempts || 0) + 1 < MAX_ATTEMPTS) {
