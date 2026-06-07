@@ -162,6 +162,24 @@ export async function embed(text) {
   }
 }
 
+// A guaranteed-correct screen-transition + animation foundation. Agents kept
+// re-writing this and introducing bugs (stale state, no-op transitions). Mandate
+// it verbatim so transitions/animations ALWAYS work; the agent builds on top.
+const WEB_FOUNDATION =
+  "REQUIRED FOUNDATION — copy this EXACT transition & animation system VERBATIM (do not rewrite or omit any of it) and build your screens on top. It guarantees smooth, professional transitions and entrance animations:\n" +
+  "/* styles.css */\n" +
+  ".screen{position:absolute;inset:0;display:flex;flex-direction:column;opacity:0;pointer-events:none;transform:translateX(24px);transition:opacity .38s cubic-bezier(.32,.72,0,1),transform .38s cubic-bezier(.32,.72,0,1)}\n" +
+  ".screen.active{opacity:1;pointer-events:auto;transform:none;z-index:2}\n" +
+  ".screen.exiting{opacity:0;transform:translateX(-24px);z-index:1}\n" +
+  "@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}\n" +
+  ".screen.active .stagger>*{opacity:0;animation:fadeUp .5s forwards}\n" +
+  ".screen.active .stagger>*:nth-child(1){animation-delay:.04s}.screen.active .stagger>*:nth-child(2){animation-delay:.1s}.screen.active .stagger>*:nth-child(3){animation-delay:.16s}.screen.active .stagger>*:nth-child(4){animation-delay:.22s}.screen.active .stagger>*:nth-child(5){animation-delay:.28s}.screen.active .stagger>*:nth-child(6){animation-delay:.34s}\n" +
+  "button,.pressable{transition:transform .12s ease}button:active,.pressable:active{transform:scale(.96)}\n" +
+  "/* app.js */\n" +
+  "function navigateTo(id){const cur=document.querySelector('.screen.active'),next=document.getElementById(id);if(!next||cur===next)return;if(cur){cur.classList.add('exiting');cur.classList.remove('active');setTimeout(()=>cur.classList.remove('exiting'),420);}next.classList.add('active');window.scrollTo(0,0);}\n" +
+  "document.addEventListener('click',e=>{const t=e.target.closest('[data-nav]');if(t){e.preventDefault();navigateTo(t.getAttribute('data-nav'));}});\n" +
+  "RULES: every screen is <div class=\"screen\" id=\"screen-...\">; EXACTLY ONE starts with class=\"screen active\". Wrap each screen's main content in <div class=\"stagger\"> so it animates in. Navigate ONLY via data-nav=\"screen-target\" on buttons (already wired — never write your own broken navigation). On TOP of this, add more polish keyframes: an animated success checkmark on activation, a card reveal/flip, skeleton loaders, a balance count-up. Keep the foundation intact.";
+
 const SIM = {
   observatory: ["scan the data streams", "chart the latest signals", "log the night readings"],
   security: ["sweep the perimeter", "audit the access logs", "run a vulnerability pass"],
@@ -289,15 +307,19 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   if (isBuild) {
     const singleRequested = /\b(single|one)[-\s]?(file|html|page)\b|self-?contained|inline (everything|all|css)/i.test(`${task.title} ${task.prompt}`);
     const webStack = new Set(["static", "node", "react", "django"]);
+    const isMultiScreenWeb = /onboard|sign[- ]?up|\bapply\b|application|activat|\bkyc\b|\bflow\b|\bsteps?\b|wallet|top[- ]?up|screens?|journey|app\b/i.test(`${task.title} ${task.prompt}`);
     if (build && build.type === "app") {
       // Full app/platform in the stack Jay Jay recommended — multi-file project.
       const rules = webStack.has(build.stack) ? `\n\n${STYLING_RULES}` : "";
-      system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}${rules}\n\n${CRAFT_BAR}\n\n${ENG_MULTI}`;
+      const foundation = (build.stack === "static" || build.stack === "node") && isMultiScreenWeb ? `\n\n${WEB_FOUNDATION}` : "";
+      system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}${rules}\n\n${CRAFT_BAR}${foundation}\n\n${ENG_MULTI}`;
     } else if (singleRequested) {
-      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html with all your hand-written CSS in an inline <style> (design tokens in :root) and JS in an inline <script> — NO Tailwind/CDN. Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
+      const foundation = isMultiScreenWeb ? `\n\n${WEB_FOUNDATION}` : "";
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}${foundation}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html with all your hand-written CSS in an inline <style> (design tokens in :root) and JS in an inline <script> — NO Tailwind/CDN. Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
     } else {
       // DEFAULT for web: a proper MULTI-FILE project, not one big HTML.
-      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css (your real design classes), js/app.js (split into modules if helpful), and manifest.json for the PWA. Link css/styles.css and js/app.js with their exact paths. ${ENG_MULTI}`;
+      const foundation = isMultiScreenWeb ? `\n\n${WEB_FOUNDATION}` : "";
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}${foundation}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css (your real design classes), js/app.js (split into modules if helpful), and manifest.json for the PWA. Link css/styles.css and js/app.js with their exact paths. ${ENG_MULTI}`;
     }
   }
   const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}`;
