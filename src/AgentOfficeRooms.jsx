@@ -160,6 +160,26 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
   );
   const screen = (x, y, w, h, bars = 3) => (<g><rect x={x} y={y} width={w} height={h} rx="2" fill="#05080f" stroke={c} strokeOpacity="0.6" />{Array.from({ length: bars }).map((_, i) => (<rect key={i} x={x + 4} y={y + 5 + i * 5} width={w - 8 - (i % 2) * 6} height="2" rx="1" fill={c} opacity={on} className="tw" style={{ animationDelay: `${i * 0.3}s` }} />))}</g>);
   const desk = (x, w) => (<g><rect x={x} y="108" width={w} height="6" rx="2" fill={c} opacity="0.55" /><rect x={x + 3} y="114" width="4" height="20" fill={c} opacity="0.35" /><rect x={x + w - 7} y="114" width="4" height="20" fill={c} opacity="0.35" /></g>);
+  // A monitor showing animated, syntax-coloured "code" that types itself.
+  const codeScreen = (x, y, w, h) => {
+    const cols = [c, "#67e8f9", "#4ade80", "#facc15", "#f472b6"];
+    const indents = [0, 7, 7, 14, 7, 0, 14, 7];
+    const lineH = 4.2, pad = 4, top = y + 7.5;
+    const n = Math.max(2, Math.floor((h - 11) / lineH));
+    const lines = [];
+    for (let i = 0; i < n; i++) {
+      const ind = indents[i % indents.length];
+      const lw = Math.max(8, (w - pad * 2 - ind) * (0.5 + ((i * 37) % 50) / 100));
+      lines.push(<rect key={i} x={x + pad + ind} y={top + i * lineH} width={lw} height="2" rx="1" fill={cols[(i + ind) % cols.length]} opacity={on} className={work ? "code-type" : ""} style={{ transformBox: "fill-box", transformOrigin: "left", animationDelay: `${(i % n) * 0.28}s`, animationDuration: `${1.5 + (i % 3) * 0.5}s` }} />);
+    }
+    return (<g>
+      <rect x={x} y={y} width={w} height={h} rx="2" fill="#05080f" stroke={c} strokeOpacity="0.65" />
+      <rect x={x} y={y} width={w} height="4.5" rx="2" fill={c} opacity="0.22" />
+      {[2.5, 6, 9.5].map((dx, i) => <circle key={i} cx={x + dx + 1} cy={y + 2.4} r="0.9" fill={c} opacity="0.55" />)}
+      {lines}
+      <rect className="code-cursor" x={x + pad + indents[(n - 1) % indents.length]} y={top + (n - 1) * lineH - 0.5} width="2.2" height="3" fill="#e8edff" />
+    </g>);
+  };
 
   let furn = null;
   switch (room) {
@@ -197,13 +217,23 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
         <g transform="translate(34,118)" fill={c}><rect x="-2" y="0" width="4" height="16" opacity="0.5" /><circle cx="0" cy="-2" r="5" opacity="0.7" /><circle cx="-7" cy="2" r="5" opacity="0.6" /><circle cx="7" cy="2" r="5" opacity="0.6" /></g>
       </g>);
       break;
-    case "WORKSHOP":
+    case "WORKSHOP": // Development Center — a coder's setup with live code on the screens
       furn = (<g>
-        <rect x="12" y="10" width="120" height="40" rx="2" fill="#04060d" stroke={c} strokeOpacity="0.4" />
-        <g stroke={c} strokeWidth="2" fill="none" opacity="0.7">{[24, 44, 64, 84].map((x, i) => (<line key={i} x1={x} y1="16" x2={x} y2="30" />))}<circle cx="108" cy="24" r="6" /><rect x="105" y="28" width="3" height="14" transform="rotate(40 106 30)" /></g>
-        <rect x="150" y="104" width="96" height="8" rx="2" fill={c} opacity="0.5" /><rect x="156" y="112" width="5" height="22" fill={c} opacity="0.35" /><rect x="234" y="112" width="5" height="22" fill={c} opacity="0.35" />
-        <g transform="translate(196,94)" className={work ? "spin" : ""} style={{ transformOrigin: "196px 94px" }} stroke={c} strokeWidth="2" fill="none"><circle cx="0" cy="0" r="7" />{[0, 60, 120, 180, 240, 300].map((d) => (<line key={d} x1={7 * Math.cos(d * Math.PI / 180)} y1={7 * Math.sin(d * Math.PI / 180)} x2={10 * Math.cos(d * Math.PI / 180)} y2={10 * Math.sin(d * Math.PI / 180)} />))}</g>
-        {desk(40, 70)}
+        {/* central code editor + two side monitors, all typing live code */}
+        {codeScreen(84, 5, 92, 50)}
+        {codeScreen(12, 13, 60, 38)}
+        {codeScreen(188, 13, 60, 38)}
+        {/* monitor stand for the main screen */}
+        <rect x="126" y="55" width="8" height="7" rx="1" fill={c} opacity="0.4" /><rect x="118" y="61" width="24" height="3" rx="1" fill={c} opacity="0.4" />
+        {/* desk */}
+        <rect x="12" y="106" width="236" height="8" rx="2" fill={c} opacity="0.5" /><rect x="20" y="114" width="5" height="20" fill={c} opacity="0.32" /><rect x="235" y="114" width="5" height="20" fill={c} opacity="0.32" />
+        {/* terminal window on the desk */}
+        {codeScreen(150, 84, 64, 18)}
+        {/* keyboard */}
+        <g opacity="0.6">
+          <rect x="34" y="90" width="70" height="13" rx="2" fill="#04060d" stroke={c} strokeOpacity="0.5" />
+          {[0, 1].map((r) => [40, 49, 58, 67, 76, 85, 94].map((kx, i) => <rect key={`${r}-${i}`} x={kx - (r ? 3 : 0)} y={93 + r * 5} width="5.5" height="3" rx="1" fill={c} opacity="0.4" />))}
+        </g>
       </g>);
       break;
     case "ARCHIVE":
@@ -1424,6 +1454,8 @@ const CSS = `
 .octo-tilt { animation:octoTilt 1.8s ease-in-out infinite; }
 .tw { animation:twk 1.6s ease-in-out infinite; } @keyframes twk { 0%,100%{opacity:.3;} 50%{opacity:1;} }
 .spin { animation:spin 1.3s linear infinite; } @keyframes spin { to{transform:rotate(360deg);} }
+.code-type { animation:codeType 1.8s ease-in-out infinite; } @keyframes codeType { 0%{transform:scaleX(.04);} 55%{transform:scaleX(1);} 100%{transform:scaleX(1);} }
+.code-cursor { animation:blink .9s step-end infinite; } @keyframes blink { 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
 .mc-marquee { animation:marq 26s linear infinite; will-change:transform; } @keyframes marq { from{transform:translateX(0);} to{transform:translateX(-50%);} }
 .mc-btn:hover { filter:brightness(1.15); } .mc-btn:active { transform:scale(.97); }
 `;
