@@ -205,6 +205,32 @@ const STACK_GUIDE = {
   "react-native": "Stack: React Native (Expo) + React Navigation. Deliver package.json, App.js, and screens/components in separate files, plus README.md (npm install, npx expo start).",
 };
 
+// Self-QA: Orbit reviews the app it just built and returns it with bugs fixed,
+// BEFORE delivering. Catches intent mismatches (e.g. "tap card should flip it",
+// not just show 'activated'), dead controls, broken nav, overlaps.
+async function selfAuditBuild(build, task, model) {
+  if (!ai || !model || !build || build.length < 200) return build;
+  try {
+    try { addEvent({ kind: "review", text: `Orbit is QA-testing "${task.title}" and fixing bugs before delivering…`, taskId: task.id, agentId: task.assignedTo || "orbit" }); } catch {}
+    const fixed = await generate(
+      "You are ORBIT doing a STRICT QA pass on an app you just built, BEFORE it ships. Return the COMPLETE corrected project (same \"===== FILE: path =====\" markers, full files) with EVERY bug fixed — keep whatever already works.\n" +
+        "Find and fix, specifically:\n" +
+        "1) INTENT MATCH — every behaviour the task implies is actually implemented and behaves correctly. E.g. if tapping the card should FLIP it to reveal details, tapping MUST flip the card with animation — NOT just toggle an 'activated' label. If a button says 'Activate', it must visibly change the card to an activated state.\n" +
+        "2) WIRED INTERACTIONS — every button/toggle/input has a working handler and does the right thing; navigation goes to the correct screen; there are NO dead controls.\n" +
+        "3) VISIBLE STATE — actions update the UI (activation changes the card, top-up updates the balance & transactions, etc.).\n" +
+        "4) NO JS that errors or silently does nothing (check selectors/IDs match the HTML).\n" +
+        "5) NO overlapping or clipped elements; the full flow is navigable end to end.\n" +
+        "Output ONLY the full corrected files. Do not shorten or summarise the app.",
+      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nTHE APP YOU BUILT (audit and fix it):\n${String(build).slice(0, 60000)}`,
+      { model, maxOutputTokens: BUILD_MAX_TOKENS, temperature: 0.3 }
+    );
+    // Guard: only accept the audited version if it's substantial (not truncated/empty).
+    return fixed && fixed.length > build.length * 0.6 ? fixed : build;
+  } catch {
+    return build;
+  }
+}
+
 /* Worker performs the task, building on the department's memory.
    model=null (or no key) => simulated path: no API call, no cost. */
 export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null, upstream = [], build = null) {
@@ -260,10 +286,10 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
       ? "\n\nTools: request_help (consult another department), http_request (actually call an API to test it — use {{NAME}} placeholders for secrets), request_credentials (ask the human for sandbox keys). Actually run tests with http_request and report real responses; if you lack a credential, call request_credentials. Use request_help when another department's expertise would improve the result."
       : "\n\nTool: request_help — consult another department's specialist when their expertise would genuinely improve your deliverable (e.g. ask Observatory to research something, Development to sanity-check code, Security for a risk check). Use it sparingly, then fold their answer into your work.";
     const out = await generateWithTools(system + toolNote, userPrompt, { model, media, tools, toolCtx, maxOutputTokens: isBuild ? BUILD_MAX_TOKENS : undefined });
-    return out || `Done: ${task.title}.`;
+    return (isBuild ? await selfAuditBuild(out, task, model) : out) || `Done: ${task.title}.`;
   }
   const out = await generate(system, userPrompt, { model, media, maxOutputTokens: isBuild ? BUILD_MAX_TOKENS : undefined });
-  return out || `Done: ${task.title}.`;
+  return (isBuild ? await selfAuditBuild(out, task, model) : out) || `Done: ${task.title}.`;
 }
 
 /* Router: pick the single best department for a task (so "Any" goes to the
