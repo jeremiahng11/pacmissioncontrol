@@ -371,6 +371,27 @@ export async function synthesize(task, parts, model = null) {
   return out || `# ${task.title}\n\n${joined}`;
 }
 
+/* Research Lab reviews a finished deliverable and proposes concrete
+   improvements (or says it's done / needs the human's input). */
+export async function suggestImprovements(task, result, model = null) {
+  const fallback = { done: false, needsInput: false, note: "Reviewed.", improvements: [] };
+  if (!ai || !model || !result) return fallback;
+  try {
+    const txt = await generate(
+      "You are the Research Lab QA reviewing a COMPLETED deliverable for the CTO. Propose the most valuable, CONCRETE, actionable improvements that would make it noticeably better (UX/UI polish, completeness of the flow, missing screens/states, correctness, accessibility, performance). " +
+        "If it is genuinely excellent with nothing material left, set done=true with an empty list. If progressing needs a human decision only they can make (ambiguous direction, a missing requirement, a product choice), set needsInput=true and explain in the note. " +
+        "Respond ONLY as JSON: {\"done\": boolean, \"needsInput\": boolean, \"note\": \"<=18 words\", \"improvements\": [{\"title\": \"<=8 words\", \"detail\": \"one specific change to make\"}]} — max 5, ordered by impact.",
+      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${String(result).slice(0, 24000)}`,
+      { json: true, temperature: 0.4, model }
+    );
+    const p = JSON.parse(txt);
+    const improvements = Array.isArray(p.improvements) ? p.improvements.filter((x) => x && x.title).slice(0, 5).map((x) => ({ title: String(x.title).slice(0, 80), detail: String(x.detail || x.title).slice(0, 400) })) : [];
+    return { done: !!p.done && !improvements.length, needsInput: !!p.needsInput, note: String(p.note || "").slice(0, 160) || "Reviewed.", improvements };
+  } catch {
+    return fallback;
+  }
+}
+
 /* One-line memory note so future related tasks can continue the work. */
 export async function summarizeForMemory(agent, task, result, model = null) {
   if (!ai || !model) return `${task.title} — completed.`;

@@ -584,7 +584,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, suggestImprovements, setAutoImprove, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "", plan: false, priority: "normal" });
   const [selected, setSelected] = useState(null);
@@ -1225,6 +1225,25 @@ export default function AgentOffice() {
                   <button style={SS.continueBtn} onClick={() => { const v = followText.trim(); if (v) { followupTask(selectedTask.id, v); setFollowText(""); setSelected(null); } }}><RotateCw size={13} /> SEND</button>
                 </div>
                 <div style={{ fontSize: 10, color: "#5e7088", marginTop: 4, lineHeight: 1.4 }}>Creates a follow-up that <b>continues from this deliverable</b> — the agent builds on what's done (code, research, etc.), not from scratch.</div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+                  <button style={SS.ghostBtn} onClick={() => suggestImprovements(selectedTask.id)}><Sparkles size={12} /> SUGGEST IMPROVEMENTS</button>
+                  <label style={SS.planToggle} title="Jay Jay keeps reviewing and applying the top improvement automatically until none remain or your input is needed">
+                    <input type="checkbox" checked={!!selectedTask.autoImprove} onChange={(e) => setAutoImprove(selectedTask.id, e.target.checked)} style={{ accentColor: "#a855f7" }} />
+                    Auto-improve
+                  </label>
+                </div>
+                {selectedTask.autoImprove && <div style={{ fontSize: 10.5, color: "#c4b5fd", marginTop: 6 }}>⟳ Auto-improving — Research Lab reviews, Jay Jay queues the top improvement, and repeats until there's nothing left or your input is needed.</div>}
+                {selectedTask.improvementNote && <div style={{ fontSize: 11, color: "#9db0c8", marginTop: 8 }}><b style={{ color: "#f472b6" }}>Research Lab:</b> {selectedTask.improvementNote}</div>}
+                {(selectedTask.improvements || []).map((imp, i) => (
+                  <div key={i} style={SS.impRow}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#e8edff" }}>{imp.title}</div>
+                      <div style={{ fontSize: 11, color: "#9db0c8", marginTop: 2 }}>{imp.detail}</div>
+                    </div>
+                    <button style={SS.applyBtn} onClick={() => { followupTask(selectedTask.id, imp.detail); setSelected(null); }}>APPLY</button>
+                  </div>
+                ))}
               </>
             )}
             <div style={SS.modalActions}>
@@ -1385,6 +1404,8 @@ const SS = {
   missionItemHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   miX: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 0, display: "flex" },
   routineRow: { display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440" },
+  impRow: { display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 9, background: "#0c1226", border: "1px solid #1a2440", marginTop: 6 },
+  applyBtn: { flexShrink: 0, padding: "7px 12px", borderRadius: 7, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   routineTitle: { fontSize: 12.5, fontWeight: 700, color: "#e8edff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   routineMeta: { fontSize: 10, color: "#8aa0c0", marginTop: 2 },
   secTitle: { fontSize: 9, letterSpacing: 1.5, color: "#5e7088", fontWeight: 700, margin: "2px 0" },
@@ -1539,8 +1560,9 @@ const CSS = `
 .walker.coding { animation:codeMove 3.4s cubic-bezier(.45,.05,.3,1) infinite; }
 @keyframes codeMove { 0%{left:43%;} 24%{left:43%;} 50%{left:58%;} 74%{left:58%;} 100%{left:43%;} }
 /* eyeballs darting between keyboard (down) and screen (up) while working */
-.iris-scan { animation:irisScan 2.6s ease-in-out infinite; }
-@keyframes irisScan { 0%,12%{transform:translate(0,0);} 28%,40%{transform:translate(-.5px,1.6px);} 56%,70%{transform:translate(.5px,-1.4px);} 88%,100%{transform:translate(0,0);} }
+.iris-scan { animation:irisScan 2.8s ease-in-out infinite; }
+/* look at the keyboard (slightly down) then up at the screens — never the floor */
+@keyframes irisScan { 0%,12%{transform:translate(0,-.3px);} 30%,44%{transform:translate(-.6px,.7px);} 60%,74%{transform:translate(.4px,-1.5px);} 90%,100%{transform:translate(0,-.3px);} }
 /* work particles rising from the agent (code symbols for Orbit, etc.) */
 .work-fx { position:absolute; bottom:64%; left:50%; width:0; height:0; z-index:6; pointer-events:none; }
 .work-particle { position:absolute; bottom:0; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; white-space:nowrap; opacity:0; animation:floatUp 2.6s ease-in infinite; }

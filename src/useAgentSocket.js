@@ -107,6 +107,8 @@ export function useAgentSocket() {
   const deleteTask = useCallback((id) => api.deleteTask(id).catch(() => {}), []);
   const retryTask = useCallback((id) => api.retryTask(id), []); // let callers see errors
   const followupTask = useCallback((id, instruction) => api.followupTask(id, instruction).catch((e) => console.error(e)), []);
+  const suggestImprovements = useCallback((id) => api.suggestImprovements(id).catch((e) => console.error(e)), []);
+  const setAutoImprove = useCallback((id, on) => api.autoImprove(id, on).catch(() => {}), []);
   const clearTasks = useCallback((scope) => api.clearTasks(scope).catch(() => {}), []);
   const createMission = useCallback((m) => api.createMission(m).catch((e) => console.error(e)), []);
   const control = useCallback((a, extra) => api.control(a, extra).catch(() => {}), []);
@@ -130,5 +132,5 @@ export function useAgentSocket() {
   const updateRoutine = useCallback((id, patch) => api.updateRoutine(id, patch).catch(() => {}), []);
   const deleteRoutine = useCallback((id) => api.deleteRoutine(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine };
+  return { agents, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, suggestImprovements, setAutoImprove, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine };
 }

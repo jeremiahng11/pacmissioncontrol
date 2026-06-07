@@ -22,7 +22,7 @@ import {
 import { startScheduler, seedRoutines } from "./schedule.js";
 import multipart from "@fastify/multipart";
 import {
-  startOrchestrator, dispatchNow, allHands, clockOut, getSettings, setSetting,
+  startOrchestrator, dispatchNow, allHands, clockOut, getSettings, setSetting, reviewForImprovements,
 } from "./orchestrator.js";
 import {
   verifyCredentials, setSession, clearSession, isAuthed, isAuthedFromHeader, loginPage,
@@ -301,6 +301,22 @@ app.post("/api/tasks/:id/retry", async (req, reply) => {
   addEvent({ kind: "system", text: `Jay Jay re-dispatching: ${t.title}`, taskId: t.id });
   await dispatchNow();
   reply.send({ ok: true });
+});
+
+app.post("/api/tasks/:id/suggest", (req, reply) => {
+  const t = getTask(req.params.id);
+  if (!t) return reply.code(404).send({ error: "not found" });
+  if (t.status !== "done") return reply.code(400).send({ error: "only completed tasks can be reviewed" });
+  reviewForImprovements(t.id).catch((e) => console.error("[api] suggest", e.message)); // async
+  reply.send({ ok: true });
+});
+
+app.post("/api/tasks/:id/autoimprove", (req, reply) => {
+  const t = getTask(req.params.id);
+  if (!t) return reply.code(404).send({ error: "not found" });
+  const on = !!(req.body || {}).on;
+  updateTask(t.id, { autoImprove: on, ...(on ? {} : {}) });
+  reply.send({ ok: true, autoImprove: on });
 });
 
 app.post("/api/tasks/:id/followup", (req, reply) => {

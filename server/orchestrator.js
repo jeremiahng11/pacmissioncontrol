@@ -8,7 +8,7 @@ import {
   upsertDocument, recallMemory, appendMemory, addMemoryNote, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
   recordOutcome, getStats,
 } from "./store.js";
-import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent, classifyDepartment, recommendStack } from "./gemini.js";
+import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent, classifyDepartment, recommendStack, suggestImprovements } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL, GEMINI_DAILY_BUDGET_USD } from "./config.js";
@@ -303,9 +303,65 @@ async function synthesizePlan(t, kids) {
   addEvent({ kind: "done", text: `Jay Jay ✓ assembled "${t.title}" from ${done.length} sub-tasks`, agentId: "jeremiah", taskId: t.id });
 }
 
+// ---- Continuous improvement: Research Lab reviews a done task and proposes
+// improvements; auto-improve keeps applying the top one until none remain. ----
+const MAX_AUTO_IMPROVE = 6;
+const improving = new Set();
+
+export async function reviewForImprovements(taskId) {
+  const t = getTask(taskId);
+  if (!t || t.status !== "done" || improving.has(t.id)) return;
+  improving.add(t.id);
+  try {
+    addEvent({ kind: "review", text: `Scribe is reviewing "${t.title}" for improvements…`, agentId: "scribe", taskId: t.id });
+    const r = await suggestImprovements(t, t.result, GEMINI_FLASH_MODEL || GEMINI_MODEL);
+    updateTask(t.id, { improvements: r.improvements, improvementNote: r.note, improveDone: r.done, improveNeedsInput: r.needsInput });
+    addEvent({ kind: "system", text: r.done ? `Scribe: "${t.title}" looks complete — nothing material to improve.` : `Scribe suggested ${r.improvements.length} improvement(s) for "${t.title}"`, agentId: "scribe", taskId: t.id });
+  } finally { improving.delete(t.id); }
+}
+
+function applyImprovement(t, improvement) {
+  updateTask(t.id, {
+    prompt: `${t.prompt}\n\nIMPROVEMENT (apply this specific enhancement; keep everything else working): ${improvement}`,
+    status: "queued", attempts: 0, startedAt: null, completedAt: null,
+    revisions: (t.revisions || 0) + 1, reviewNotes: "improvement applied",
+    improvements: [], improvementNote: null,
+  });
+  addEvent({ kind: "assign", text: `Jay Jay queued an improvement for "${t.title}": ${String(improvement).slice(0, 60)}`, agentId: "jeremiah", taskId: t.id });
+}
+
+function processImprovements() {
+  for (const t of getTasks()) {
+    if (!t.autoImprove || t.status !== "done" || improving.has(t.id)) continue;
+    if ((t.improveCount || 0) >= MAX_AUTO_IMPROVE) {
+      updateTask(t.id, { autoImprove: false });
+      addEvent({ kind: "system", text: `Auto-improve paused for "${t.title}" after ${MAX_AUTO_IMPROVE} rounds — review and continue if you want.`, taskId: t.id });
+      continue;
+    }
+    improving.add(t.id);
+    suggestImprovements(t, t.result, GEMINI_FLASH_MODEL || GEMINI_MODEL)
+      .then((r) => {
+        if (r.done || !r.improvements.length) {
+          updateTask(t.id, { autoImprove: false, improvements: [], improvementNote: r.note || "Nothing left to improve." });
+          addEvent({ kind: "done", text: `Jay Jay: "${t.title}" — nothing left to improve. ✓`, agentId: "jeremiah", taskId: t.id });
+        } else if (r.needsInput) {
+          updateTask(t.id, { autoImprove: false, improvements: r.improvements, improvementNote: r.note });
+          createIssue({ kind: "review", title: `Your input needed: "${t.title}"`, detail: r.note || "Auto-improve needs your decision before continuing.", taskId: t.id });
+          addEvent({ kind: "issue", text: `Jay Jay paused auto-improve on "${t.title}" — needs your input`, taskId: t.id });
+        } else {
+          updateTask(t.id, { improveCount: (t.improveCount || 0) + 1 });
+          applyImprovement(t, r.improvements[0].detail || r.improvements[0].title);
+        }
+      })
+      .catch((e) => console.error("[orch] processImprovements", e.message))
+      .finally(() => improving.delete(t.id));
+  }
+}
+
 async function tick() {
   if (settings.paused) return;
   routeTasks();
+  processImprovements();
   // Daily spend ceiling: pause the office when the estimated cost crosses it.
   if (GEMINI_DAILY_BUDGET_USD > 0 && getStats().estCostTotal >= GEMINI_DAILY_BUDGET_USD) {
     settings.paused = true;
