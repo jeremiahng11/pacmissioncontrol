@@ -213,15 +213,16 @@ async function selfAuditBuild(build, task, model) {
   try {
     try { addEvent({ kind: "review", text: `Orbit is QA-testing "${task.title}" and fixing bugs before delivering…`, taskId: task.id, agentId: task.assignedTo || "orbit" }); } catch {}
     const fixed = await generate(
-      "You are ORBIT doing a STRICT QA pass on an app you just built, BEFORE it ships. Return the COMPLETE corrected project (same \"===== FILE: path =====\" markers, full files) with EVERY bug fixed — keep whatever already works.\n" +
-        "Find and fix, specifically:\n" +
-        "1) INTENT MATCH — every behaviour the task implies is actually implemented and behaves correctly. E.g. if tapping the card should FLIP it to reveal details, tapping MUST flip the card with animation — NOT just toggle an 'activated' label. If a button says 'Activate', it must visibly change the card to an activated state.\n" +
-        "2) WIRED INTERACTIONS — every button/toggle/input has a working handler and does the right thing; navigation goes to the correct screen; there are NO dead controls.\n" +
-        "3) VISIBLE STATE — actions update the UI (activation changes the card, top-up updates the balance & transactions, etc.).\n" +
-        "4) NO JS that errors or silently does nothing (check selectors/IDs match the HTML).\n" +
-        "5) NO overlapping or clipped elements; the full flow is navigable end to end.\n" +
-        "Output ONLY the full corrected files. Do not shorten or summarise the app.",
-      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nTHE APP YOU BUILT (audit and fix it):\n${String(build).slice(0, 60000)}`,
+      "You are ORBIT doing a STRICT QA pass on the project you just built, BEFORE it ships. Return the COMPLETE corrected project (same \"===== FILE: path =====\" markers, full files) with EVERY bug fixed — keep whatever already works. This applies to ANY stack (web, mobile app, or backend/API).\n" +
+        "Audit and FIX bugs across LOGIC and UX/UI:\n" +
+        "1) INTENT MATCH — every behaviour/feature the task implies is actually implemented and behaves correctly. E.g. if tapping a card should FLIP it to reveal details, tapping MUST flip the card — NOT just toggle an 'activated' label; if a button says 'Activate', the card must visibly become activated; if an endpoint should return X, it must.\n" +
+        "2) LOGIC — control flow, state, calculations, validation, data handling and edge cases are correct; fix logic errors.\n" +
+        "3) WIRED INTERACTIONS — every control / route / handler works and does the right thing; navigation and routing are correct; NO dead buttons or unreachable screens.\n" +
+        "4) VISIBLE STATE — actions update the UI/data (activation changes the card, top-up updates the balance & transactions, a save persists, etc.).\n" +
+        "5) UX/UI — NO OVERFLOWING or clipped content, NO overlapping elements, layout holds at the target size, readable contrast, sensible spacing.\n" +
+        "6) NO code that errors or silently does nothing — selectors/IDs/imports/paths must resolve.\n" +
+        "Output ONLY the full corrected files. Do not shorten or summarise the project.",
+      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nTHE PROJECT YOU BUILT (audit and fix it):\n${String(build).slice(0, 60000)}`,
       { model, maxOutputTokens: BUILD_MAX_TOKENS, temperature: 0.3 }
     );
     // Guard: only accept the audited version if it's substantial (not truncated/empty).
@@ -404,14 +405,16 @@ export async function suggestImprovements(task, result, model = null) {
   if (!ai || !model || !result) return fallback;
   try {
     const txt = await generate(
-      "You are the Research Lab QA reviewing a COMPLETED deliverable for the CTO. Propose the most valuable, CONCRETE, actionable improvements that would make it noticeably better (UX/UI polish, completeness of the flow, missing screens/states, correctness, accessibility, performance). " +
-        "If it is genuinely excellent with nothing material left, set done=true with an empty list. If progressing needs a human decision only they can make (ambiguous direction, a missing requirement, a product choice), set needsInput=true and explain in the note. " +
-        "Respond ONLY as JSON: {\"done\": boolean, \"needsInput\": boolean, \"note\": \"<=18 words\", \"improvements\": [{\"title\": \"<=8 words\", \"detail\": \"one specific change to make\"}]} — max 5, ordered by impact.",
+      "You are the Research Lab QA reviewing a COMPLETED deliverable for the CTO. " +
+        "FIRST screen for BUGS and defects — list every one you find as a high-priority item: logic errors, wrong behaviour vs the task's intent, broken or dead interactions/handlers/routes, state that doesn't update, and UX/UI problems (OVERFLOWING or clipped content, overlapping elements, broken/unresponsive layout, poor contrast/spacing). " +
+        "THEN add other high-value improvements (UX/UI polish, completeness of the flow, missing screens/states, accessibility, performance). Bugs come first, ordered by severity, then enhancements. " +
+        "If it is genuinely excellent — no bugs and nothing material left — set done=true with an empty list. If progressing needs a human decision only they can make (ambiguous direction, a missing requirement, a product choice), set needsInput=true and explain in the note. " +
+        "Respond ONLY as JSON: {\"done\": boolean, \"needsInput\": boolean, \"note\": \"<=18 words\", \"improvements\": [{\"title\": \"<=8 words\", \"detail\": \"one specific change/fix to make\"}]} — max 6, ordered by impact (bugs first).",
       `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nDELIVERABLE:\n${String(result).slice(0, 24000)}`,
       { json: true, temperature: 0.4, model }
     );
     const p = JSON.parse(txt);
-    const improvements = Array.isArray(p.improvements) ? p.improvements.filter((x) => x && x.title).slice(0, 5).map((x) => ({ title: String(x.title).slice(0, 80), detail: String(x.detail || x.title).slice(0, 400) })) : [];
+    const improvements = Array.isArray(p.improvements) ? p.improvements.filter((x) => x && x.title).slice(0, 6).map((x) => ({ title: String(x.title).slice(0, 80), detail: String(x.detail || x.title).slice(0, 400) })) : [];
     return { done: !!p.done && !improvements.length, needsInput: !!p.needsInput, note: String(p.note || "").slice(0, 160) || "Reviewed.", improvements };
   } catch {
     return fallback;
