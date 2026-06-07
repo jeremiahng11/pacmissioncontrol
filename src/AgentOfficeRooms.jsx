@@ -43,7 +43,7 @@ const NAV = [
 ];
 
 const PLACEHOLDER = {
-  content:  { icon: Satellite, title: "Content",  desc: "Plan and track the content your agents produce." },
+  content:  { icon: Satellite, title: "Content",  desc: "Plan and track the content your agents produce. Coming soon — for now, assign content tasks in Tasks and find the results in Docs." },
 };
 
 const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n || 0));
@@ -66,7 +66,7 @@ const TEAM = [
   ]},
   { section: "ORCHESTRATOR", members: [
     { id: "jeremiah", name: "JAY JAY", role: "CTO · Command Core", color: "#facc15", cadence: "Always on",
-      desc: "The central brain. Routes every task to the right department, watches the work, verifies completion, and assigns the next." },
+      desc: "The central brain. Plans complex goals into sub-tasks, routes work to the right department, QA-reviews every deliverable, assembles results, and keeps the team moving." },
   ]},
   { section: "DEPARTMENTS", members: [
     { id: "scout",  name: "SCOUT",  role: "Researcher · Observatory",      color: "#38bdf8", cadence: "On demand",
@@ -76,7 +76,7 @@ const TEAM = [
     { id: "scribe", name: "SCRIBE", role: "Writer · Research Lab",         color: "#f472b6", cadence: "On demand",
       desc: "Produces clear written deliverables — summaries, briefs, and reports." },
     { id: "orbit",  name: "ORBIT",  role: "Engineer · Development Center", color: "#a855f7", cadence: "On demand",
-      desc: "Designs pragmatic technical solutions and writes clean, correct code." },
+      desc: "Builds apps and platforms and writes clean, correct code (downloadable as files or a .zip), and can test live APIs using sandbox credentials." },
     { id: "vault",  name: "VAULT",  role: "Data · Admin",                  color: "#fb923c", cadence: "On demand",
       desc: "Organizes, indexes, reconciles, and summarizes records and structured data." },
   ]},
@@ -295,7 +295,7 @@ function DocsView({ documents, byId, onOpen }) {
   return (
     <div style={SS.libWrap}>
       <h1 style={SS.h1}><FileText size={20} /> Docs</h1>
-      <div style={SS.libSub}>Deliverables your agents produced. Each one is linked to the task it came from — click to read the full output.</div>
+      <div style={SS.libSub}>Deliverables your agents produced, each linked to its task. Open to read the full output and download it — research &amp; reports as <b>.doc</b>, code as its real file type (.html/.py/.dart…) or a <b>.zip</b> for multi-file projects.</div>
       {documents.length === 0 && <div style={SS.queueEmpty}>No documents yet. Assign a task (e.g. research) — the completed deliverable lands here.</div>}
       <div style={SS.docsList}>
         {documents.map((d) => {
@@ -321,7 +321,7 @@ function MemoryView({ memory, onDelete }) {
   return (
     <div style={SS.libWrap}>
       <h1 style={SS.h1}><Brain size={20} /> Memory</h1>
-      <div style={SS.libSub}>What the agents remember. Each department keeps a rolling knowledge base it reads before new work and adds to after — so tasks build on each other.</div>
+      <div style={SS.libSub}>What the agents remember. Each department builds a knowledge base as it works; before a new task an agent recalls the most <b>relevant</b> past notes (semantic search), then saves what it learned after — so the team compounds expertise over time.</div>
       {sorted.length === 0 && <div style={SS.queueEmpty}>No memory yet. As agents complete tasks, they record key facts here to continue from next time.</div>}
       <div style={SS.memGrid}>
         {sorted.map((m) => (
@@ -347,7 +347,7 @@ function IssuesView({ issues, byId, onResolve, onRetry, onClearAll }) {
         <h1 style={SS.h1}><AlertTriangle size={20} color="#fb923c" /> Issues</h1>
         {issues.length > 0 && <button style={SS.dismissBtn} onClick={() => { if (confirm(`Dismiss all ${issues.length} issues?`)) onClearAll(); }}><Trash2 size={12} /> Dismiss all</button>}
       </div>
-      <div style={SS.libSub}>Problems Jay Jay escalated to you (Group CTO) — API/quota, auth, or tasks that failed. <b>Retry & resolve</b> sends the task back to the agent to try again (continuing from partial work); <b>Dismiss</b> just closes the issue. If they keep reappearing, the underlying task keeps failing (usually the Gemini quota/model) — each failure is a new issue.</div>
+      <div style={SS.libSub}>Things Jay Jay escalated to you (Group CTO) — quota/billing, a bad model, a task that failed QA review, or an agent requesting <b>sandbox credentials</b> to test an API. <b>Retry &amp; resolve</b> sends it back to the agent (continuing from partial work); <b>Dismiss</b> closes it. Issues clear automatically once the task succeeds, and don't persist across restarts.</div>
       {issues.length === 0 && <div style={SS.queueEmpty}>No open issues. Everything's running clean. ✓</div>}
       <div style={SS.docsList}>
         {issues.map((i) => {
@@ -482,6 +482,7 @@ export default function AgentOffice() {
   const [credForm, setCredForm] = useState({ name: "", value: "" });
   const [followText, setFollowText] = useState("");
   const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
+  const [composeMode, setComposeMode] = useState("task");
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -781,39 +782,48 @@ export default function AgentOffice() {
         {view === "tasks" && (
           <div style={SS.tasksWrap}>
             <h1 style={SS.h1}><Target size={20} /> Tasks</h1>
+            <div style={SS.libSub}>Assign work to the team and watch the queue. A <b>single task</b> goes to one agent (with a priority, or <b>Plan &amp; split</b> to auto-decompose a big goal); a <b>mission</b> is a list of tasks, optionally a <b>sequence</b> where each builds on the last. Jay Jay routes, QA-reviews, and agents can consult each other mid-task.</div>
             <div style={SS.tasksGrid}>
               <div style={SS.tasksCompose}>
-                <div style={SS.secTitle}>ASSIGN A TASK</div>
-                {composer}
-                <div style={SS.composeHint}>Pick a department (or “Any”) and Jay Jay routes it to the right agent.</div>
-                <div style={{ borderTop: "1px solid #1a2440", margin: "6px 0 2px" }} />
-                <div style={SS.secTitle}>LAUNCH A MISSION</div>
-                <input style={SS.input} placeholder="Mission name (e.g. Launch v2)" value={mission.name} onChange={(e) => setMission((m) => ({ ...m, name: e.target.value }))} />
-                {mission.items.map((it, i) => (
-                  <div key={i} style={SS.missionItem}>
-                    <div style={SS.missionItemHead}>
-                      <span style={{ fontSize: 9, color: "#5e7088", fontWeight: 700, letterSpacing: 1 }}>TASK {i + 1}</span>
-                      {mission.items.length > 1 && <button style={SS.miX} onClick={() => setMission((m) => ({ ...m, items: m.items.filter((_, idx) => idx !== i) }))}><X size={11} /></button>}
-                    </div>
-                    <input style={SS.input} placeholder="Task title" value={it.title} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x) }))} />
-                    <textarea style={SS.textarea} rows={3} placeholder="Detailed description / instructions for this task" value={it.description} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, description: e.target.value } : x) }))} />
-                    <select style={SS.select} value={it.department} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, department: e.target.value } : x) }))}>
-                      {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                  </div>
-                ))}
-                <button style={SS.ghostBtn} onClick={() => setMission((m) => ({ ...m, items: [...m.items, { title: "", description: "", department: "" }] }))}><Plus size={12} /> ADD ANOTHER TASK</button>
-                <label style={SS.planToggle} title="Tasks run one after another; each gets the previous task's deliverable to build on">
-                  <input type="checkbox" checked={mission.sequential} onChange={(e) => setMission((m) => ({ ...m, sequential: e.target.checked }))} style={{ accentColor: "#a855f7" }} />
-                  Run in sequence — each task builds on the previous
-                </label>
-                <button style={SS.assignBtn} onClick={() => {
-                  const tasks = mission.items.filter((it) => it.title.trim()).map((it) => ({ title: it.title.trim(), prompt: it.description.trim() || it.title.trim(), department: it.department || null }));
-                  if (!tasks.length) return;
-                  createMission({ name: mission.name.trim(), tasks, sequential: mission.sequential });
-                  setMission({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
-                }}><Plus size={13} /> LAUNCH MISSION</button>
-                <div style={SS.composeHint}>Add as many tasks as you like — each with its own description and agent. Jay Jay assigns and works the list.</div>
+                <div style={SS.modeToggle}>
+                  <button style={{ ...SS.modeBtn, ...(composeMode === "task" ? SS.modeBtnOn : {}) }} onClick={() => setComposeMode("task")}>Single task</button>
+                  <button style={{ ...SS.modeBtn, ...(composeMode === "mission" ? SS.modeBtnOn : {}) }} onClick={() => setComposeMode("mission")}>Mission</button>
+                </div>
+                {composeMode === "task" ? (
+                  <>
+                    {composer}
+                    <div style={SS.composeHint}>Jay Jay routes it to the right agent. Set a <b>priority</b> to reorder the queue, or tick <b>Plan &amp; split</b> to auto-break a big goal into sub-tasks.</div>
+                  </>
+                ) : (
+                  <>
+                    <input style={SS.input} placeholder="Mission name (e.g. Launch v2)" value={mission.name} onChange={(e) => setMission((m) => ({ ...m, name: e.target.value }))} />
+                    {mission.items.map((it, i) => (
+                      <div key={i} style={SS.missionItem}>
+                        <div style={SS.missionItemHead}>
+                          <span style={{ fontSize: 9, color: "#5e7088", fontWeight: 700, letterSpacing: 1 }}>TASK {i + 1}</span>
+                          {mission.items.length > 1 && <button style={SS.miX} onClick={() => setMission((m) => ({ ...m, items: m.items.filter((_, idx) => idx !== i) }))}><X size={11} /></button>}
+                        </div>
+                        <input style={SS.input} placeholder="Task title" value={it.title} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, title: e.target.value } : x) }))} />
+                        <textarea style={SS.textarea} rows={3} placeholder="Detailed description / instructions for this task" value={it.description} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, description: e.target.value } : x) }))} />
+                        <select style={SS.select} value={it.department} onChange={(e) => setMission((m) => ({ ...m, items: m.items.map((x, idx) => idx === i ? { ...x, department: e.target.value } : x) }))}>
+                          {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                    <button style={SS.ghostBtn} onClick={() => setMission((m) => ({ ...m, items: [...m.items, { title: "", description: "", department: "" }] }))}><Plus size={12} /> ADD ANOTHER TASK</button>
+                    <label style={SS.planToggle} title="Tasks run one after another; each gets the previous task's deliverable to build on">
+                      <input type="checkbox" checked={mission.sequential} onChange={(e) => setMission((m) => ({ ...m, sequential: e.target.checked }))} style={{ accentColor: "#a855f7" }} />
+                      Run in sequence — each task builds on the previous
+                    </label>
+                    <button style={SS.assignBtn} onClick={() => {
+                      const tasks = mission.items.filter((it) => it.title.trim()).map((it) => ({ title: it.title.trim(), prompt: it.description.trim() || it.title.trim(), department: it.department || null }));
+                      if (!tasks.length) return;
+                      createMission({ name: mission.name.trim(), tasks, sequential: mission.sequential });
+                      setMission({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
+                    }}><Plus size={13} /> LAUNCH MISSION</button>
+                    <div style={SS.composeHint}>Add as many tasks as you like — each with its own description and agent. Tick <b>Run in sequence</b> to make them a pipeline.</div>
+                  </>
+                )}
               </div>
               <div style={SS.tasksList}>
                 <div style={SS.tasksListHead}>
@@ -1079,6 +1089,9 @@ const SS = {
   statItem: { whiteSpace: "nowrap", letterSpacing: 0.3 },
   statSep: { color: "#2a3550" },
   planToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c4b5fd", cursor: "pointer", padding: "4px 2px", userSelect: "none" },
+  modeToggle: { display: "flex", gap: 4, padding: 3, background: "#0a1020", border: "1px solid #1a2440", borderRadius: 9, marginBottom: 2 },
+  modeBtn: { flex: 1, padding: "7px 10px", borderRadius: 7, border: "none", background: "transparent", color: "#8aa0c0", fontWeight: 700, fontSize: 11, letterSpacing: 0.5, cursor: "pointer", fontFamily: MONO },
+  modeBtnOn: { background: "#a855f7", color: "#0b1020" },
   subRow: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: "#0a1020", border: "1px solid #1a2440", cursor: "pointer", marginBottom: 5 },
   missionItem: { display: "flex", flexDirection: "column", gap: 6, padding: 9, borderRadius: 8, border: "1px solid #1a2440", background: "#0a1020" },
   missionItemHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
