@@ -551,6 +551,21 @@ export function deleteDocument(id) {
 
 /* ---------- memory (rolling knowledge base per department) ---------- */
 export const getMemoryText = (scope) => state.memory.get(scope)?.content || "";
+
+// Retrieval: instead of dumping the whole (growing) memory into every prompt,
+// return the notes most RELEVANT to the task (keyword overlap), with ties broken
+// by recency. With no query match it falls back to the most recent notes.
+const MEM_STOP = new Set("this that these those with from your you our their have been will would should could about into over under more most very just than then them they what task agent provide using used make made create build report note notes work done complete completed result the and for".split(" "));
+export function recallMemory(scope, query = "", limit = 8) {
+  const m = state.memory.get(scope);
+  if (!m || !m.content) return "";
+  const notes = m.content.split("\n").map((s) => s.trim()).filter(Boolean);
+  if (notes.length <= limit) return notes.join("\n");
+  const words = [...new Set(String(query).toLowerCase().match(/[a-z0-9]{4,}/g) || [])].filter((w) => !MEM_STOP.has(w));
+  const scored = notes.map((n, i) => ({ n, i, rel: words.reduce((s, w) => s + (n.toLowerCase().includes(w) ? 1 : 0), 0) }));
+  scored.sort((a, b) => b.rel - a.rel || b.i - a.i); // most relevant, then most recent
+  return scored.slice(0, limit).sort((a, b) => a.i - b.i).map((s) => s.n).join("\n"); // output chronologically
+}
 export function deleteMemory(scope) {
   if (!state.memory.has(scope)) return false;
   state.memory.delete(scope);

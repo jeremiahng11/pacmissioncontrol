@@ -5,7 +5,7 @@
 
 import {
   bus, getWorkers, getTasks, getTask, setAgent, createTask, updateTask, addEvent,
-  upsertDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
+  upsertDocument, recallMemory, appendMemory, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
   recordOutcome, getStats,
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize } from "./gemini.js";
@@ -75,7 +75,9 @@ async function runTask(agent, task) {
     const lightModel = isUser ? (GEMINI_FLASH_MODEL || model) : model;
 
     setAgent(agent.id, { status: "working", task: task.title });
-    const memoryText = isUser ? getMemoryText(agent.department) : "";
+    // Retrieve only the memory notes relevant to this task (keeps prompts lean
+    // and on-point as a department's memory grows).
+    const memoryText = isUser ? recallMemory(agent.department, `${task.title} ${task.prompt}`) : "";
     // Any output from a prior attempt becomes context so the agent CONTINUES
     // the work instead of starting cold (re-queues and manual "Continue").
     const priorWork = isUser ? (task.result || task.priorWork || null) : null;
