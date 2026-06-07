@@ -49,6 +49,7 @@ const PLACEHOLDER = {
 const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n || 0));
 const fmtTime = (ms) => { try { return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const EVENT_COLOR = { assign: "#facc15", handoff: "#67e8f9", tool: "#38bdf8", review: "#eab308", done: "#4ade80", redo: "#fb923c", fail: "#fb5570", issue: "#fb5570", system: "#9db0c8" };
+const WORK_INFO = { development: ["</>", "coding"], observatory: ["◎", "scanning"], research_lab: ["✎", "writing"], security: ["⛨", "auditing"], admin: ["▤", "sorting"], _: ["•", "working"] };
 
 const fmtCadence = (r) => {
   if (r.cadenceType === "interval") return r.everyMinutes >= 60 && r.everyMinutes % 60 === 0 ? `every ${r.everyMinutes / 60}h` : `every ${r.everyMinutes}m`;
@@ -259,6 +260,7 @@ const Room = memo(function Room({ room, name, color, cto, status, task, departme
         {sayText && !cto && <div className="speech" style={{ borderColor: color, color }}>{sayText}</div>}
         {status === "thinking" && <div className="cue" style={{ color }}>?</div>}
         {status === "idle" && <div className="cue zzz">z z z</div>}
+        {status === "working" && !cto && <div className="work-bubble" style={{ color, borderColor: color }}>{(WORK_INFO[department] || WORK_INFO._)[0]} {(WORK_INFO[department] || WORK_INFO._)[1]}<span className="work-dots">…</span></div>}
         <div className={`walker ${busy && !ctoAway && !cto ? "busy " + walk : ""}`}>
           <div className="oshadow" style={ctoAway ? { opacity: 0 } : undefined} />
           {!ctoAway && <Octo color={color} size={cto ? 76 : 56} status={status} cto={cto} />}
@@ -609,6 +611,11 @@ export default function AgentOffice() {
     ...(live[s.id] || { status: s.cto ? "command" : "idle", task: s.cto ? "running the office" : "standing by", last: "" }),
   }));
   const byId = Object.fromEntries(agents.map((a) => [a.id, a]));
+  // Jay Jay's status bubble while he's planning / assembling a plan.
+  const jayLive = byId.jeremiah;
+  const jayBubble = jayLive && jayLive.status === "thinking"
+    ? (/plan/i.test(jayLive.task || "") ? "📋 planning…" : /assembl/i.test(jayLive.task || "") ? "🧩 assembling…" : "💭 thinking…")
+    : null;
 
   const taskList = Object.values(tasks).sort((a, b) => b.createdAt - a.createdAt);
   const activeTasks = taskList.filter((t) => ["queued", "in_progress", "review"].includes(t.status));
@@ -876,7 +883,7 @@ export default function AgentOffice() {
               })}
               {jay.coords && (
                 <div className="courier" style={{ left: jay.coords.x - 38, top: jay.coords.y - 58, transition: `left ${jay.dur || 1.2}s ease-in-out, top ${jay.dur || 1.2}s ease-in-out, opacity .3s ease` }}>
-                  {jay.say && <div className="courier-say">{jay.say}</div>}
+                  {(jay.say || jayBubble) && <div className={`courier-say${!jay.say && jayBubble ? " thinking" : ""}`}>{jay.say || jayBubble}</div>}
                   <div className="oshadow courier-shadow" />
                   <span className="jay-bob"><Octo color="#facc15" size={76} status="working" cto flip={jay.facing === "left"} /></span>
                 </div>
@@ -1462,6 +1469,10 @@ const CSS = `
 .spin { animation:spin 1.3s linear infinite; } @keyframes spin { to{transform:rotate(360deg);} }
 .code-type { animation:codeType 1.8s ease-in-out infinite; } @keyframes codeType { 0%{transform:scaleX(.04);} 55%{transform:scaleX(1);} 100%{transform:scaleX(1);} }
 .code-cursor { animation:blink .9s step-end infinite; } @keyframes blink { 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
+.work-bubble { position:absolute; top:6px; left:50%; transform:translateX(-50%); z-index:6; font-family:'JetBrains Mono'; font-weight:700; font-size:8px; letter-spacing:.5px; padding:2px 8px; border-radius:99px; background:rgba(7,10,20,.88); border:1px solid currentColor; white-space:nowrap; box-shadow:0 0 10px rgba(0,0,0,.4); animation:workPulse 1.7s ease-in-out infinite; }
+@keyframes workPulse { 0%,100%{opacity:.6;} 50%{opacity:1;} }
+.work-dots { animation:blink 1s step-end infinite; }
+.courier-say.thinking { animation:workPulse 1.4s ease-in-out infinite; }
 .mc-marquee { animation:marq 26s linear infinite; will-change:transform; } @keyframes marq { from{transform:translateX(0);} to{transform:translateX(-50%);} }
 .mc-btn:hover { filter:brightness(1.15); } .mc-btn:active { transform:scale(.97); }
 `;
