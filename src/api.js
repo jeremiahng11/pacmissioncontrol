@@ -29,6 +29,7 @@ export const api = {
       fd.append("title", t.title);
       if (t.prompt) fd.append("prompt", t.prompt);
       if (t.department) fd.append("department", t.department);
+      if (t.plan) fd.append("plan", "true");
       for (const f of files) fd.append("files", f);
       return fetch("/api/tasks", { method: "POST", credentials: "same-origin", body: fd }).then((r) => {
         if (r.status === 401) { window.location.href = "/login"; throw new Error("unauthorized"); }

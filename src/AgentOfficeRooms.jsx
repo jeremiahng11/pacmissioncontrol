@@ -94,8 +94,8 @@ const META = {
 const ROOM_LABEL = { "WORKSHOP": "DEVELOPMENT CENTER", "ARCHIVE": "ADMIN" };
 const roomLabel = (r) => ROOM_LABEL[r] || r;
 
-const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570", blocked: "#fb923c" };
-const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED", blocked: "ISSUE" };
+const STATUS_COLOR = { queued: "#64786d", in_progress: "#4ade80", review: "#eab308", done: "#38bdf8", failed: "#fb5570", blocked: "#fb923c", planning: "#a855f7" };
+const STATUS_LABEL = { queued: "QUEUED", in_progress: "WORKING", review: "REVIEW", done: "DONE", failed: "FAILED", blocked: "ISSUE", planning: "PLANNING" };
 
 /* --- pixel Pac-Man sprite for the CTO (Jay Jay), drawn like the octopus --- */
 const PAC_OPEN = ["....XXXXX....", "..XXXXXXXXX..", ".XXXXXXXXXXX.", "XXXXXXXXXXXXX", "XXXXXXXXXXX..", "XXXXXXXXX....", "XXXXXX.......", "XXXXXXXXX....", "XXXXXXXXXXX..", "XXXXXXXXXXXXX", ".XXXXXXXXXXX.", "..XXXXXXXXX..", "....XXXXX...."];
@@ -468,7 +468,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 export default function AgentOffice() {
   const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
-  const [form, setForm] = useState({ title: "", department: "", details: "" });
+  const [form, setForm] = useState({ title: "", department: "", details: "", plan: false });
   const [selected, setSelected] = useState(null);
   const [doc, setDoc] = useState(null);
   const [say, setSay] = useState(null);
@@ -606,7 +606,7 @@ export default function AgentOffice() {
     e.preventDefault();
     const title = form.title.trim();
     if (!title) return;
-    assignTask({ title, prompt: form.details.trim() || title, department: form.department || null }, files);
+    assignTask({ title, prompt: form.details.trim() || title, department: form.plan ? null : (form.department || null), plan: form.plan }, files);
     setForm((f) => ({ ...f, title: "", details: "" }));
     setFiles([]);
   };
@@ -623,6 +623,10 @@ export default function AgentOffice() {
       </select>
       <input style={SS.input} placeholder="Task title…" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
       <textarea style={SS.textarea} rows={3} placeholder="Details / instructions (optional)" value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} />
+      <label style={SS.planToggle} title="Jay Jay breaks the goal into sub-tasks across departments, then assembles one deliverable">
+        <input type="checkbox" checked={form.plan} onChange={(e) => setForm((f) => ({ ...f, plan: e.target.checked }))} style={{ accentColor: "#a855f7" }} />
+        <Sparkles size={12} /> Plan &amp; split — let Jay Jay decompose this into sub-tasks
+      </label>
       <label style={SS.attachBtn}>
         <Paperclip size={12} /> Attach files (image / PDF / text)
         <input type="file" multiple accept="image/*,application/pdf,.txt,.csv,.md,.json" style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
@@ -638,7 +642,7 @@ export default function AgentOffice() {
           ))}
         </div>
       )}
-      <button type="submit" style={SS.assignBtn}><Plus size={13} /> ASSIGN TASK</button>
+      <button type="submit" style={SS.assignBtn}><Plus size={13} /> {form.plan ? "PLAN & DISPATCH" : "ASSIGN TASK"}</button>
     </form>
   );
 
@@ -801,7 +805,7 @@ export default function AgentOffice() {
                   </div>
                 )}
                 {(() => {
-                  const shown = taskList.filter((t) => taskFilter === "all" ? true : taskFilter === "mine" ? t.createdBy === "user" : t.createdBy !== "user");
+                  const shown = taskList.filter((t) => !t.parentId).filter((t) => taskFilter === "all" ? true : taskFilter === "mine" ? t.createdBy === "user" : t.createdBy !== "user");
                   if (!shown.length) return <div style={SS.queueEmpty}>{taskFilter === "mine" ? "You haven't assigned any tasks yet — use the composer on the left." : taskFilter === "auto" ? "No auto-generated tasks (AUTO is off or idle)." : "No tasks yet. Add one, or let Jay Jay run the office in Visual."}</div>;
                   return shown.map((t) => {
                     const col = STATUS_COLOR[t.status] || "#64786d";
@@ -811,6 +815,7 @@ export default function AgentOffice() {
                       <div key={t.id} style={SS.taskRow} onClick={() => setSelected(t.id)}>
                         <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
                         <span style={{ ...SS.srcBadge, color: sc, borderColor: `${sc}66`, background: `${sc}1a` }}>{sl}</span>
+                        {t.isPlan && <span style={SS.planTag}>PLAN</span>}
                         {t.mission && <span style={SS.missionTag}>◇ {t.mission}</span>}
                         <span style={SS.taskRowTitle}>{t.title}</span>
                         {t.assignedTo && byId[t.assignedTo] && <span style={SS.taskRowWho}>{byId[t.assignedTo].name}</span>}
@@ -862,6 +867,26 @@ export default function AgentOffice() {
               {selectedTask.revisions ? ` · rev ${selectedTask.revisions}` : ""}
             </div>
             {selectedTask.prompt && selectedTask.prompt !== selectedTask.title && <div style={SS.modalPrompt}>{selectedTask.prompt}</div>}
+            {selectedTask.isPlan && (() => {
+              const kids = Object.values(tasks).filter((t) => t.parentId === selectedTask.id).sort((a, b) => a.createdAt - b.createdAt);
+              const doneN = kids.filter((k) => k.status === "done").length;
+              return (
+                <>
+                  <div style={SS.secTitle}>SUB-TASKS {kids.length ? `· ${doneN}/${kids.length} done` : "· planning…"}</div>
+                  {!kids.length && <div style={SS.queueEmpty}>Jay Jay is breaking this down into sub-tasks…</div>}
+                  {kids.map((k) => {
+                    const col = STATUS_COLOR[k.status] || "#64786d";
+                    return (
+                      <div key={k.id} style={SS.subRow} onClick={() => setSelected(k.id)}>
+                        <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[k.status]}</span>
+                        <span style={SS.taskRowTitle}>{k.title}</span>
+                        {k.department && <span style={SS.taskRowWho}>{DEPT_OPTS.find((d) => d[0] === k.department)?.[1] || k.department}</span>}
+                      </div>
+                    );
+                  })}
+                </>
+              );
+            })()}
             {selectedTask.attachments && selectedTask.attachments.length > 0 && (
               <>
                 <div style={SS.secTitle}>ATTACHMENTS ({selectedTask.attachments.length})</div>
@@ -1016,6 +1041,9 @@ const SS = {
   taskRowWho: { fontSize: 9, color: "#8aa0c0", letterSpacing: 0.5 },
   rowDel: { marginLeft: "auto", flexShrink: 0, background: "transparent", border: "1px solid #2a3550", color: "#8aa0c0", borderRadius: 6, padding: "4px 6px", cursor: "pointer", display: "flex", alignItems: "center" },
   missionTag: { fontSize: 8.5, color: "#c4b5fd", background: "rgba(168,85,247,.12)", border: "1px solid rgba(168,85,247,.4)", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
+  planTag: { fontSize: 8.5, color: "#0b1020", background: "#a855f7", border: "1px solid #a855f7", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap", fontWeight: 700 },
+  planToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c4b5fd", cursor: "pointer", padding: "4px 2px", userSelect: "none" },
+  subRow: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: "#0a1020", border: "1px solid #1a2440", cursor: "pointer", marginBottom: 5 },
   missionItem: { display: "flex", flexDirection: "column", gap: 6, padding: 9, borderRadius: 8, border: "1px solid #1a2440", background: "#0a1020" },
   missionItemHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   miX: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 0, display: "flex" },

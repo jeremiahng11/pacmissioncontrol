@@ -89,7 +89,7 @@ app.get("/api/state", (req, reply) => {
 });
 
 app.post("/api/tasks", async (req, reply) => {
-  let title, prompt, department, assignedTo;
+  let title, prompt, department, assignedTo, plan;
   const files = [];
   if (req.isMultipart()) {
     for await (const part of req.parts()) {
@@ -99,13 +99,14 @@ app.post("/api/tasks", async (req, reply) => {
       } else if (part.fieldname === "title") title = part.value;
       else if (part.fieldname === "prompt") prompt = part.value;
       else if (part.fieldname === "department") department = part.value;
+      else if (part.fieldname === "plan") plan = part.value === "true" || part.value === true;
     }
   } else {
-    ({ title, prompt, department, assignedTo } = req.body || {});
+    ({ title, prompt, department, assignedTo, plan } = req.body || {});
   }
   if (!title || !String(title).trim()) return reply.code(400).send({ error: "title required" });
   const dept = department && VALID_DEPARTMENTS.has(department) ? department : null;
-  const task = createTask({ title: String(title).trim(), prompt, department: dept, assignedTo: assignedTo || null, createdBy: "user" });
+  const task = createTask({ title: String(title).trim(), prompt, department: dept, assignedTo: assignedTo || null, createdBy: "user", isPlan: !!plan });
   for (const f of files) createAttachment({ taskId: task.id, ...f });
   // Re-broadcast so the task carries its attachments to all clients.
   bus.emit("task", serializeTaskWithAttachments(task.id));

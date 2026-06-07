@@ -124,6 +124,42 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   return out || `Done: ${task.title}.`;
 }
 
+/* Planner: Jay Jay breaks a goal into 2-5 department-assignable sub-tasks. */
+export async function planTask(task, model = null) {
+  const DEPTS = "observatory (Scout — research/monitoring), research_lab (Scribe — writing/analysis), development (Orbit — building/coding/API tests), admin (Vault — records/organizing), security (Warden — security checks)";
+  if (!ai || !model) {
+    return [{ title: `Work on: ${task.title}`, prompt: task.prompt, department: task.department || null }];
+  }
+  const txt = await generate(
+    `You are JAY JAY, the CTO, planning how to deliver a GOAL with your team. Break it into 2-5 CONCRETE sub-tasks, each assignable to ONE department and completable by one agent in a single shot. Order them logically (research before building, build before testing). Departments: ${DEPTS}. Respond ONLY as JSON: {"subtasks":[{"title":"<=10 words","prompt":"clear instructions","department":"one of: observatory|research_lab|development|admin|security"}]}.`,
+    `GOAL: ${task.title}\n\nDETAILS: ${task.prompt}`,
+    { json: true, temperature: 0.4, model }
+  );
+  const valid = new Set(["observatory", "research_lab", "development", "admin", "security"]);
+  try {
+    const p = JSON.parse(txt);
+    const subs = (p.subtasks || []).filter((s) => s && s.title).slice(0, 6).map((s) => ({
+      title: String(s.title).slice(0, 80),
+      prompt: String(s.prompt || s.title).slice(0, 2000),
+      department: valid.has(s.department) ? s.department : (task.department || null),
+    }));
+    if (subs.length) return subs;
+  } catch { /* fall through */ }
+  return [{ title: `Work on: ${task.title}`, prompt: task.prompt, department: task.department || null }];
+}
+
+/* Synthesis: combine the sub-task deliverables into one final deliverable. */
+export async function synthesize(task, parts, model = null) {
+  const joined = parts.map((p) => `## ${p.title}${p.department ? ` (${p.department})` : ""}\n${p.result || ""}`).join("\n\n---\n\n");
+  if (!ai || !model) return `# ${task.title}\n\n${joined}`;
+  const out = await generate(
+    "You are JAY JAY, the CTO. Combine the sub-task deliverables below into ONE cohesive, well-structured final deliverable that fulfils the goal. Integrate and deduplicate — don't just concatenate. Keep all substantive content (code blocks, tables, data). Markdown, starting with a \"# Title\" heading. No preamble.",
+    `GOAL: ${task.title}\n\nDETAILS: ${task.prompt}\n\nSUB-TASK DELIVERABLES:\n${joined.slice(0, 28000)}`,
+    { model }
+  );
+  return out || `# ${task.title}\n\n${joined}`;
+}
+
 /* One-line memory note so future related tasks can continue the work. */
 export async function summarizeForMemory(agent, task, result, model = null) {
   if (!ai || !model) return `${task.title} — completed.`;

@@ -7,7 +7,7 @@ import {
   bus, getWorkers, getTasks, setAgent, createTask, updateTask, addEvent,
   upsertDocument, getMemoryText, appendMemory, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
 } from "./store.js";
-import { runWork, runReview, generateTask, summarizeForMemory } from "./gemini.js";
+import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
@@ -34,7 +34,9 @@ const deptAgentBusy = (dept) => {
 };
 
 function nextTaskFor(agent) {
-  const queued = getTasks().filter((t) => t.status === "queued");
+  // Plan tasks are orchestrated by processPlans (decompose -> synthesize), not
+  // worked directly by an agent.
+  const queued = getTasks().filter((t) => t.status === "queued" && !t.isPlan);
   const byAge = (a, b) => a.createdAt - b.createdAt;
   let pool = queued.filter((t) => t.assignedTo === agent.id).sort(byAge);
   if (!pool.length)
@@ -93,7 +95,11 @@ async function runTask(agent, task) {
     if (verdict.complete) {
       updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note });
       deleteIssuesForTask(task.id); // it succeeded — clear any prior issues for it
-      if (isUser) {
+      // Sub-tasks of a plan don't make their own document — the plan's
+      // synthesized deliverable is the single output (avoids Docs/Projects clutter).
+      const parent = task.parentId ? getTasks().find((x) => x.id === task.parentId) : null;
+      const isPlanChild = !!(parent && parent.isPlan);
+      if (isUser && !isPlanChild) {
         // Real work only: save the deliverable as a document and fold a note
         // into the department's memory so future tasks continue the work.
         upsertDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
@@ -175,8 +181,56 @@ function maybeGenerate(agent) {
     .finally(() => generating.delete(agent.department));
 }
 
+// ---- Planning (orchestrator-worker): decompose a goal -> sub-tasks -> synthesize ----
+const planning = new Set();
+
+function processPlans() {
+  for (const t of getTasks()) {
+    if (!t.isPlan || planning.has(t.id)) continue;
+    if (t.status === "queued") {
+      planning.add(t.id);
+      makePlan(t).catch((e) => console.error("[orch] makePlan", e.message)).finally(() => planning.delete(t.id));
+    } else if (t.status === "planning") {
+      const kids = getTasks().filter((c) => c.parentId === t.id);
+      if (kids.length && kids.every((c) => c.status === "done" || c.status === "failed")) {
+        planning.add(t.id);
+        synthesizePlan(t, kids).catch((e) => console.error("[orch] synthesizePlan", e.message)).finally(() => planning.delete(t.id));
+      }
+    }
+  }
+}
+
+async function makePlan(t) {
+  updateTask(t.id, { status: "planning", startedAt: Date.now() });
+  setAgent("jeremiah", { status: "thinking", task: `planning: ${t.title}` });
+  addEvent({ kind: "system", text: `Jay Jay is planning "${t.title}"…`, agentId: "jeremiah", taskId: t.id });
+  const subs = await planTask(t, GEMINI_MODEL);
+  for (const s of subs) createTask({ title: s.title, prompt: s.prompt, department: s.department, createdBy: "user", parentId: t.id });
+  setAgent("jeremiah", { status: "command", task: "on duty" });
+  addEvent({ kind: "assign", text: `Jay Jay split "${t.title}" into ${subs.length} sub-tasks`, agentId: "jeremiah", taskId: t.id });
+}
+
+async function synthesizePlan(t, kids) {
+  const done = kids.filter((c) => c.status === "done");
+  if (!done.length) {
+    updateTask(t.id, { status: "failed", completedAt: Date.now(), reviewNotes: "all sub-tasks failed" });
+    createIssue({ kind: "review", title: `Plan "${t.title}" — all sub-tasks failed`, detail: "None of the sub-tasks produced a deliverable; check the sub-tasks for the cause.", taskId: t.id });
+    addEvent({ kind: "fail", text: `Jay Jay ✗ "${t.title}" — sub-tasks failed`, taskId: t.id });
+    return;
+  }
+  setAgent("jeremiah", { status: "thinking", task: `assembling: ${t.title}` });
+  addEvent({ kind: "review", text: `Jay Jay is assembling "${t.title}" from ${done.length} sub-tasks…`, agentId: "jeremiah", taskId: t.id });
+  const parts = done.map((c) => ({ title: c.title, department: c.department, result: c.result }));
+  const final = await synthesize(t, parts, GEMINI_MODEL);
+  updateTask(t.id, { status: "done", result: final, completedAt: Date.now(), reviewNotes: `assembled from ${done.length} sub-tasks` });
+  upsertDocument({ taskId: t.id, title: t.title, prompt: t.prompt, department: t.department || "command", agentId: "jeremiah", content: final });
+  setAgent("jeremiah", { status: "command", task: "on duty" });
+  addEvent({ kind: "done", text: `Jay Jay ✓ assembled "${t.title}" from ${done.length} sub-tasks`, agentId: "jeremiah", taskId: t.id });
+}
+
 async function tick() {
   if (settings.paused) return;
+  processPlans();
   for (const agent of getWorkers()) {
     if (agent.status !== "idle" || busy.has(agent.id)) continue;
     const task = nextTaskFor(agent);
