@@ -37,7 +37,9 @@ function nextTaskFor(agent) {
   // Plan tasks are orchestrated by processPlans (decompose -> synthesize), not
   // worked directly by an agent.
   const queued = getTasks().filter((t) => t.status === "queued" && !t.isPlan);
-  const byAge = (a, b) => a.createdAt - b.createdAt;
+  // Higher priority first, then oldest first.
+  const RANK = { high: 0, normal: 1, low: 2 };
+  const byAge = (a, b) => (RANK[a.priority] ?? 1) - (RANK[b.priority] ?? 1) || a.createdAt - b.createdAt;
   let pool = queued.filter((t) => t.assignedTo === agent.id).sort(byAge);
   if (!pool.length)
     pool = queued.filter((t) => !t.assignedTo && t.department === agent.department).sort(byAge);

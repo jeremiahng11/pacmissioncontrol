@@ -185,6 +185,7 @@ async function migrate() {
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS parent_id text;
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS mission text;
     ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_plan boolean DEFAULT false;
+    ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority text DEFAULT 'normal';
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts DESC);
     CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at DESC);
@@ -279,6 +280,7 @@ async function loadTasks() {
       parentId: r.parent_id || null,
       mission: r.mission || null,
       isPlan: r.is_plan || false,
+      priority: r.priority || "normal",
       createdAt: new Date(r.created_at).getTime(),
       startedAt: r.started_at ? new Date(r.started_at).getTime() : null,
       completedAt: r.completed_at ? new Date(r.completed_at).getTime() : null,
@@ -303,13 +305,13 @@ async function persistTask(t) {
   if (!pool) return;
   await pool
     .query(
-      `INSERT INTO tasks (id,title,prompt,department,assigned_to,status,result,review_notes,attempts,created_by,created_at,started_at,completed_at,prior_work,parent_id,mission,is_plan)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
-       ON CONFLICT (id) DO UPDATE SET title=$2,prompt=$3,department=$4,assigned_to=$5,status=$6,result=$7,review_notes=$8,attempts=$9,started_at=$12,completed_at=$13,prior_work=$14,parent_id=$15,mission=$16,is_plan=$17`,
+      `INSERT INTO tasks (id,title,prompt,department,assigned_to,status,result,review_notes,attempts,created_by,created_at,started_at,completed_at,prior_work,parent_id,mission,is_plan,priority)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       ON CONFLICT (id) DO UPDATE SET title=$2,prompt=$3,department=$4,assigned_to=$5,status=$6,result=$7,review_notes=$8,attempts=$9,started_at=$12,completed_at=$13,prior_work=$14,parent_id=$15,mission=$16,is_plan=$17,priority=$18`,
       [t.id, t.title, t.prompt, t.department, t.assignedTo, t.status, t.result,
        t.reviewNotes, t.attempts, t.createdBy,
        new Date(t.createdAt), t.startedAt ? new Date(t.startedAt) : null,
-       t.completedAt ? new Date(t.completedAt) : null, t.priorWork || null, t.parentId || null, t.mission || null, !!t.isPlan]
+       t.completedAt ? new Date(t.completedAt) : null, t.priorWork || null, t.parentId || null, t.mission || null, !!t.isPlan, t.priority || "normal"]
     )
     .catch((e) => console.error("[store] persistTask", e.message));
 }
@@ -562,7 +564,7 @@ export function addEvent({ kind, text, agentId = null, taskId = null }) {
   return ev;
 }
 
-export function createTask({ title, prompt, department = null, assignedTo = null, createdBy = "user", priorWork = null, parentId = null, mission = null, isPlan = false }) {
+export function createTask({ title, prompt, department = null, assignedTo = null, createdBy = "user", priorWork = null, parentId = null, mission = null, isPlan = false, priority = "normal" }) {
   const task = {
     id: randomUUID(),
     title: String(title).slice(0, 120),
@@ -578,6 +580,7 @@ export function createTask({ title, prompt, department = null, assignedTo = null
     parentId: parentId || null,
     mission: mission || null,
     isPlan: !!isPlan,
+    priority: ["high", "normal", "low"].includes(priority) ? priority : "normal",
     createdAt: Date.now(),
     startedAt: null,
     completedAt: null,

@@ -468,7 +468,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 export default function AgentOffice() {
   const { agents: live, tasks, events, documents, memory, issues, routines, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
-  const [form, setForm] = useState({ title: "", department: "", details: "", plan: false });
+  const [form, setForm] = useState({ title: "", department: "", details: "", plan: false, priority: "normal" });
   const [selected, setSelected] = useState(null);
   const [doc, setDoc] = useState(null);
   const [say, setSay] = useState(null);
@@ -606,7 +606,7 @@ export default function AgentOffice() {
     e.preventDefault();
     const title = form.title.trim();
     if (!title) return;
-    assignTask({ title, prompt: form.details.trim() || title, department: form.plan ? null : (form.department || null), plan: form.plan }, files);
+    assignTask({ title, prompt: form.details.trim() || title, department: form.plan ? null : (form.department || null), plan: form.plan, priority: form.priority }, files);
     setForm((f) => ({ ...f, title: "", details: "" }));
     setFiles([]);
   };
@@ -618,9 +618,16 @@ export default function AgentOffice() {
 
   const composer = (
     <form style={SS.compose} onSubmit={submit}>
-      <select style={SS.select} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
-        {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-      </select>
+      <div style={{ display: "flex", gap: 6 }}>
+        <select style={{ ...SS.select, flex: 1 }} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
+          {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <select style={{ ...SS.select, flex: 1 }} value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}>
+          <option value="normal">Normal priority</option>
+          <option value="high">High priority</option>
+          <option value="low">Low priority</option>
+        </select>
+      </div>
       <input style={SS.input} placeholder="Task title…" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
       <textarea style={SS.textarea} rows={3} placeholder="Details / instructions (optional)" value={form.details} onChange={(e) => setForm((f) => ({ ...f, details: e.target.value }))} />
       <label style={SS.planToggle} title="Jay Jay breaks the goal into sub-tasks across departments, then assembles one deliverable">
@@ -815,6 +822,8 @@ export default function AgentOffice() {
                       <div key={t.id} style={SS.taskRow} onClick={() => setSelected(t.id)}>
                         <span style={{ ...SS.pill, color: col, borderColor: `${col}66`, background: `${col}1a` }}>{STATUS_LABEL[t.status]}</span>
                         <span style={{ ...SS.srcBadge, color: sc, borderColor: `${sc}66`, background: `${sc}1a` }}>{sl}</span>
+                        {t.priority === "high" && <span style={SS.prioHigh}>↑ HIGH</span>}
+                        {t.priority === "low" && <span style={SS.prioLow}>↓ LOW</span>}
                         {t.isPlan && <span style={SS.planTag}>PLAN</span>}
                         {t.mission && <span style={SS.missionTag}>◇ {t.mission}</span>}
                         <span style={SS.taskRowTitle}>{t.title}</span>
@@ -1042,6 +1051,8 @@ const SS = {
   rowDel: { marginLeft: "auto", flexShrink: 0, background: "transparent", border: "1px solid #2a3550", color: "#8aa0c0", borderRadius: 6, padding: "4px 6px", cursor: "pointer", display: "flex", alignItems: "center" },
   missionTag: { fontSize: 8.5, color: "#c4b5fd", background: "rgba(168,85,247,.12)", border: "1px solid rgba(168,85,247,.4)", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
   planTag: { fontSize: 8.5, color: "#0b1020", background: "#a855f7", border: "1px solid #a855f7", borderRadius: 99, padding: "2px 7px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap", fontWeight: 700 },
+  prioHigh: { fontSize: 8.5, color: "#fb7185", background: "rgba(251,113,133,.12)", border: "1px solid rgba(251,113,133,.45)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap", fontWeight: 700 },
+  prioLow: { fontSize: 8.5, color: "#7d8aa0", background: "rgba(125,138,160,.1)", border: "1px solid rgba(125,138,160,.4)", borderRadius: 99, padding: "2px 6px", letterSpacing: 0.5, flexShrink: 0, whiteSpace: "nowrap" },
   planToggle: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#c4b5fd", cursor: "pointer", padding: "4px 2px", userSelect: "none" },
   subRow: { display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 8, background: "#0a1020", border: "1px solid #1a2440", cursor: "pointer", marginBottom: 5 },
   missionItem: { display: "flex", flexDirection: "column", gap: 6, padding: 9, borderRadius: 8, border: "1px solid #1a2440", background: "#0a1020" },
