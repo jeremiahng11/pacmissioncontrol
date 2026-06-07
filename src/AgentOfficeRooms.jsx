@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Target, Satellite, Calendar, Rocket, Brain, FileText, Users, Gamepad2,
-  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key, Activity, Search,
+  Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key, Activity, Search, Eye,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
 
@@ -588,6 +588,7 @@ export default function AgentOffice() {
   const [toasts, setToasts] = useState([]);
   const [palette, setPalette] = useState(false);
   const [pq, setPq] = useState("");
+  const [preview, setPreview] = useState(null); // document id being previewed
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -1078,6 +1079,23 @@ export default function AgentOffice() {
         </div>
       )}
 
+      {preview && (
+        <div style={SS.modalBg} onClick={() => setPreview(null)}>
+          <div style={SS.previewCard} onClick={(e) => e.stopPropagation()}>
+            <div style={SS.previewHead}>
+              <span style={SS.previewTitle}><Eye size={13} /> LIVE PREVIEW</span>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <a href={`/api/documents/${preview}/preview/`} target="_blank" rel="noopener noreferrer" style={SS.previewLink}>Open full ↗</a>
+                <button style={SS.modalClose} onClick={() => setPreview(null)}><X size={16} /></button>
+              </div>
+            </div>
+            <div style={SS.previewBody}>
+              <iframe key={preview} title="Live preview" src={`/api/documents/${preview}/preview/`} sandbox="allow-scripts allow-forms allow-modals allow-popups" style={SS.previewFrame} />
+            </div>
+          </div>
+        </div>
+      )}
+
       {toasts.length > 0 && (
         <div style={SS.globalToasts}>
           {toasts.map((t) => (
@@ -1197,6 +1215,7 @@ export default function AgentOffice() {
                 const code = td.hasCode || /```|=+\s*FILE:/.test(selectedTask.result || "");
                 return (
                   <>
+                    {td.previewable && <button style={SS.previewBtn} onClick={() => setPreview(td.id)}><Eye size={13} /> PREVIEW</button>}
                     {code && <button style={SS.downloadBtn} onClick={() => downloadCode(td.id)}><Download size={13} /> DOWNLOAD CODE</button>}
                     <button style={code ? SS.ghostBtn : SS.downloadBtn} onClick={() => downloadDoc(td.id)}><Download size={13} /> .DOC</button>
                   </>
@@ -1223,6 +1242,7 @@ export default function AgentOffice() {
             <div style={SS.secTitle}>OUTPUT</div>
             <div style={SS.resultBox}>{doc.content}</div>
             <div style={SS.modalActions}>
+              {(doc.previewable || /<!doctype html|<html[\s>]|```html/i.test(doc.content || "")) && <button style={SS.previewBtn} onClick={() => setPreview(doc.id)}><Eye size={13} /> PREVIEW</button>}
               {/```/.test(doc.content || "") && <button style={SS.downloadBtn} onClick={() => downloadCode(doc.id)}><Download size={13} /> DOWNLOAD CODE</button>}
               <button style={/```/.test(doc.content || "") ? SS.ghostBtn : SS.downloadBtn} onClick={() => downloadDoc(doc.id)}><Download size={13} /> .DOC</button>
               <button style={SS.delBtn} onClick={() => { if (confirm("Delete this document?")) { deleteDocument(doc.id); setDoc(null); } }}><Trash2 size={13} /> DELETE</button>
@@ -1421,6 +1441,13 @@ const SS = {
   modalActions: { display: "flex", gap: 8, marginTop: 16, flexWrap: "wrap" },
   downloadBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   ghostBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #243358", background: "transparent", color: "#9db0c8", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  previewBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #4ade80", background: "#4ade80", color: "#08130c", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
+  previewCard: { display: "flex", flexDirection: "column", width: "min(440px, calc(100vw - 28px))", height: "min(880px, 92vh)", background: "#0b1020", border: "1px solid #243358", borderRadius: 16, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.6)" },
+  previewHead: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #18223e", flexShrink: 0 },
+  previewTitle: { display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#4ade80", fontFamily: MONO },
+  previewLink: { fontSize: 11, color: "#9db0c8", textDecoration: "none", fontFamily: MONO },
+  previewBody: { flex: 1, minHeight: 0, background: "#fff" },
+  previewFrame: { width: "100%", height: "100%", border: "none", display: "block", background: "#fff" },
   delBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 11px", borderRadius: 8, border: "1px solid rgba(251,85,112,.4)", background: "rgba(251,85,112,.1)", color: "#fca5b5", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   bannerClose: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 2, display: "flex", flexShrink: 0 },
 };

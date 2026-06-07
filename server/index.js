@@ -218,6 +218,33 @@ app.get("/api/documents/:id/code", async (req, reply) => {
   return sendFileOut(`${base}.txt`, d.content || "");
 });
 
+// Live preview: serve a web deliverable's files so the UI can render it in a
+// sandboxed iframe. Entry is index.html; relative css/js/manifest resolve
+// against /preview/.
+function previewFiles(d) {
+  let files = extractFiles(d.content || "");
+  if (!files.length) {
+    const blocks = extractCodeBlocks(d.content || "");
+    const html = blocks.find((b) => /html?$/i.test(b.lang)) || (blocks.length === 1 ? blocks[0] : null);
+    if (html) files = [{ path: "index.html", content: html.content }];
+  }
+  return files;
+}
+const normPath = (p) => String(p).replace(/^\.?\/+/, "").toLowerCase();
+app.get("/api/documents/:id/preview", (req, reply) => reply.redirect(`/api/documents/${req.params.id}/preview/`));
+app.get("/api/documents/:id/preview/*", (req, reply) => {
+  const d = getDocument(req.params.id);
+  if (!d) return reply.code(404).type("text/html").send("<p>Not found.</p>");
+  const files = previewFiles(d);
+  if (!files.length) return reply.code(404).type("text/html").send("<p style=\"font-family:sans-serif;padding:24px;color:#555\">Nothing to preview — this deliverable has no web files.</p>");
+  let sub = req.params["*"] || "";
+  if (sub === "" || sub.endsWith("/")) sub += "index.html";
+  let f = files.find((x) => normPath(x.path) === normPath(sub));
+  if (!f && normPath(sub) === "index.html") f = files.find((x) => /(^|\/)index\.html?$/i.test(x.path)) || files.find((x) => /\.html?$/i.test(x.path));
+  if (!f) return reply.code(404).type("text/plain").send("Not in project: " + sub);
+  reply.header("Content-Type", mimeForExt(extOf(f.path))).send(f.content);
+});
+
 app.delete("/api/documents/:id", (req, reply) => {
   reply.code(deleteDocument(req.params.id) ? 204 : 404).send();
 });
