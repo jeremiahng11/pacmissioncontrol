@@ -398,6 +398,7 @@ export const getTask = (id) => state.tasks.get(id);
 const serializeDocMeta = (d) => ({
   id: d.id, taskId: d.taskId, title: d.title, department: d.department,
   agentId: d.agentId, createdAt: d.createdAt, snippet: (d.content || "").slice(0, 160),
+  hasCode: /```|=+\s*FILE:/.test(d.content || ""), // so the UI can offer code/zip download + list it in Projects
 });
 const serializeMemory = (m) => ({ scope: m.scope, title: m.title, content: m.content, updatedAt: m.updatedAt, updatedBy: m.updatedBy });
 const serializeIssue = (i) => ({ id: i.id, kind: i.kind, title: i.title, detail: (i.detail || "").slice(0, 600), taskId: i.taskId, agentId: i.agentId, createdAt: i.createdAt });

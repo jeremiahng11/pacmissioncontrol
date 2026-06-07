@@ -283,8 +283,12 @@ export async function synthesize(task, parts, model = null) {
   const joined = parts.map((p) => `## ${p.title}${p.department ? ` (${p.department})` : ""}\n${p.result || ""}`).join("\n\n---\n\n");
   if (!ai || !model) return `# ${task.title}\n\n${joined}`;
   const out = await generate(
-    "You are JAY JAY, the CTO. Combine the sub-task deliverables below into ONE cohesive, well-structured final deliverable that fulfils the goal. Integrate and deduplicate — don't just concatenate. Keep all substantive content (code blocks, tables, data). Markdown, starting with a \"# Title\" heading. No preamble.",
-    `GOAL: ${task.title}\n\nDETAILS: ${task.prompt}\n\nSUB-TASK DELIVERABLES:\n${joined.slice(0, 28000)}`,
+    "You are JAY JAY, the CTO. Assemble the sub-task deliverables below into ONE cohesive final deliverable that fulfils the goal. Markdown, starting with a \"# Title\". RULES: " +
+      "(1) Integrate and deduplicate — don't just concatenate. " +
+      "(2) PRESERVE ALL CODE EXACTLY as given — keep every \"===== FILE: path =====\" marker and every fenced code block verbatim; never rewrite, summarize, or drop code (the app packages those files into a downloadable .zip). " +
+      "(3) Keep tables and data intact. " +
+      "(4) End with a \"## Contributors\" section listing which department/agent produced which part (from the sub-task headings). No preamble.",
+    `GOAL: ${task.title}\n\nDETAILS: ${task.prompt}\n\nSUB-TASK DELIVERABLES (each headed by the department that produced it):\n${joined.slice(0, 28000)}`,
     { model }
   );
   return out || `# ${task.title}\n\n${joined}`;

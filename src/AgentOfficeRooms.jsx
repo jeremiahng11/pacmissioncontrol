@@ -476,7 +476,7 @@ function StatsView({ stats, tasks, agents, onOpenTask }) {
 }
 
 function ProjectsView({ documents, byId, onOpen, onDownload }) {
-  const projects = documents.filter((d) => d.department === "development");
+  const projects = documents.filter((d) => d.department === "development" || d.hasCode);
   return (
     <div style={SS.libWrap}>
       <h1 style={SS.h1}><Rocket size={20} /> Projects</h1>
@@ -1187,8 +1187,13 @@ export default function AgentOffice() {
               {(() => {
                 const td = documents.find((d) => d.taskId === selectedTask.id);
                 if (!td) return null;
-                const isDev = selectedTask.department === "development";
-                return <button style={SS.downloadBtn} onClick={() => (isDev ? downloadCode(td.id) : downloadDoc(td.id))}><Download size={13} /> {isDev ? "DOWNLOAD CODE" : "DOWNLOAD .DOC"}</button>;
+                const code = td.hasCode || /```|=+\s*FILE:/.test(selectedTask.result || "");
+                return (
+                  <>
+                    {code && <button style={SS.downloadBtn} onClick={() => downloadCode(td.id)}><Download size={13} /> DOWNLOAD CODE</button>}
+                    <button style={code ? SS.ghostBtn : SS.downloadBtn} onClick={() => downloadDoc(td.id)}><Download size={13} /> .DOC</button>
+                  </>
+                );
               })()}
               <button style={SS.delBtn} onClick={() => { deleteTask(selectedTask.id); setSelected(null); }}><Trash2 size={13} /> DELETE TASK</button>
             </div>
