@@ -34,6 +34,9 @@ const deptAgentBusy = (dept) => {
   return w ? busy.has(w.id) : false;
 };
 
+// Specialist departments: only their own agent may do their work (no overflow).
+const SPECIALIST = new Set(["development", "security"]);
+
 // A task is ready only when all its dependencies are done (missing deps count
 // as met so a deleted upstream can't deadlock it).
 const depsMet = (t) => !(t.dependsOn || []).some((id) => { const d = getTask(id); return d && d.status !== "done"; });
@@ -52,11 +55,12 @@ function nextTaskFor(agent) {
     // General pool is only for demo/auto tasks; user "Any" tasks are routed to a
     // department first (routeTasks), so they reach the right specialist.
     pool = queued.filter((t) => !t.assignedTo && !t.department && t.createdBy === "cto").sort(byAge);
-  // Overflow assist: a free worker helps another department whose own agent is
-  // busy. Security is excluded both ways — Warden never leaves security duty,
-  // and security tasks are only ever done by Warden.
-  if (!pool.length && agent.department !== "security")
-    pool = queued.filter((t) => !t.assignedTo && t.department && t.department !== "security" && t.department !== agent.department && deptAgentBusy(t.department)).sort(byAge);
+  // Overflow assist: a free GENERAL worker helps another GENERAL department whose
+  // agent is busy. SPECIALIST departments (development, security) are excluded
+  // both ways — only Orbit ever does development, only Warden ever does security.
+  // (Scout doing a dev task produced bad results; dev work queues for Orbit only.)
+  if (!pool.length && !SPECIALIST.has(agent.department))
+    pool = queued.filter((t) => !t.assignedTo && t.department && !SPECIALIST.has(t.department) && t.department !== agent.department && deptAgentBusy(t.department)).sort(byAge);
   return pool[0] || null;
 }
 
