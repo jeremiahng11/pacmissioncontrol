@@ -198,17 +198,26 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   const fileBlock = media && media.length
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
     : "";
-  // Development tasks: emit a COMPLETE, WORKING project that runs as-is.
-  const codeBlock = agent.department === "development"
-    ? `\n\nDeliver a COMPLETE, WORKING project — full code, no placeholders, no "...", no "rest of the code here".` +
-      ` For a web page/app, STRONGLY PREFER a SINGLE self-contained index.html with all CSS inside a <style> tag and all JS inside a <script> tag, so it works correctly the moment it's opened (nothing to wire up).` +
-      ` If you genuinely need separate files, you MUST link them correctly using the EXACT file names — e.g. <link rel="stylesheet" href="styles.css"> and <script src="app.js"></script> — and every reference (hrefs, src, import paths) must resolve. Double-check the HTML actually loads the CSS/JS.` +
-      ` Output EACH file as a marker line "===== FILE: relative/path.ext =====" immediately followed by its fenced code block (so the files package into a downloadable .zip). Keep any explanation as short prose between files.`
-    : "";
-  const system =
+  const isBuild = agent.department === "development";
+  const codeBlock = ""; // dev guidance lives in the build system prompt below
+  const docSystem =
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
     `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
     `No preamble like "Here is" — start directly with the title heading.`;
+  const buildSystem =
+    `${agent.persona}\n\n` +
+    `Build a COMPLETE, WORKING, BEAUTIFUL deliverable — production quality a user would be impressed by, not a prototype.\n\n` +
+    `DESIGN BAR (aim for top-fintech polish — Revolut / Wise / Monzo):\n` +
+    `- Use a real design system. For web, load Tailwind via CDN (<script src="https://cdn.tailwindcss.com"></script>) and a clean Google Font like Inter — polished styling with zero local-file linking.\n` +
+    `- Strong visual craft: a deliberate colour palette, gradients, soft shadows, generous spacing, clear type hierarchy, rounded corners, and smooth transitions / micro-interactions on taps.\n` +
+    `- Mobile-first PWA: design to a realistic phone frame (max-width ~390px, centred on desktop) with safe-area padding; everything must fit and feel native on a phone. Include the viewport meta and a theme-color.\n` +
+    `- Real, believable content. NEVER use broken external image links — use inline SVG, CSS gradients, or emoji. For a payment/credit card, render a realistic card: gradient background, EMV chip, contactless glyph, masked number, holder name, expiry, and a Visa/Mastercard mark, with correct card proportions (~1.586:1).\n` +
+    `- Full flows: build every screen the task implies (e.g. onboarding → KYC → application → activation → top-up → wallet home), with working navigation between them.\n\n` +
+    `ENGINEERING:\n` +
+    `- Deliver a SINGLE self-contained index.html by default (Tailwind via CDN + JS in a <script>), so it runs the instant it's opened. No placeholders, no "...", no "rest here" — write the FULL code.\n` +
+    `- Only split files if truly needed; if you do, link them with EXACT names and verify every href/src/import resolves.\n` +
+    `- Output EACH file as a marker line "===== FILE: relative/path.ext =====" immediately followed by its fenced code block (so it packages into a downloadable .zip). Keep prose to a short intro line; the deliverable is the code.`;
+  const system = isBuild ? buildSystem : docSystem;
   const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}${codeBlock}`;
 
   if (tools && toolCtx) {
