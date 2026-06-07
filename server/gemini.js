@@ -205,27 +205,46 @@ const STACK_GUIDE = {
   "react-native": "Stack: React Native (Expo) + React Navigation. Deliver package.json, App.js, and screens/components in separate files, plus README.md (npm install, npx expo start).",
 };
 
-// Self-QA: Orbit reviews the app it just built and returns it with bugs fixed,
-// BEFORE delivering. Catches intent mismatches (e.g. "tap card should flip it",
-// not just show 'activated'), dead controls, broken nav, overlaps.
-async function selfAuditBuild(build, task, model) {
-  if (!ai || !model || !build || build.length < 200) return build;
+// Independent QA: SCOUT tests a build it did NOT write (fresh eyes catch what the
+// author misses), reports concrete bugs, then ORBIT fixes them. Covers any stack.
+async function qaTestBuild(build, task, model) {
+  if (!ai || !model || !build) return { clean: true, bugs: [] };
   try {
-    try { addEvent({ kind: "review", text: `Orbit is QA-testing "${task.title}" and fixing bugs before delivering…`, taskId: task.id, agentId: task.assignedTo || "orbit" }); } catch {}
+    const txt = await generate(
+      "You are SCOUT doing INDEPENDENT QA on a build a teammate produced — you did NOT write it, so review it CRITICALLY with fresh eyes and try hard to break it. Find concrete BUGS across LOGIC and UX/UI (any stack — web, mobile, or backend):\n" +
+        "- INTENT MISMATCH: a behaviour the task asks for that doesn't actually work (e.g. tapping a card should FLIP it but it only shows an 'activated' label; an Activate button that doesn't change the card; an endpoint that doesn't return what it should).\n" +
+        "- LOGIC errors: wrong control flow, state, calculations, validation, edge cases.\n" +
+        "- DEAD/UNWIRED controls, broken navigation/routes, unreachable screens.\n" +
+        "- STATE that doesn't update after an action.\n" +
+        "- UX/UI defects: OVERFLOWING or clipped content, overlapping elements, broken/unresponsive layout, poor contrast/spacing.\n" +
+        "- Code that errors or silently does nothing (mismatched selectors/IDs/imports/paths).\n" +
+        "Be specific — name the screen/element/function. Respond ONLY as JSON: {\"clean\": boolean, \"bugs\": [\"specific bug to fix\"]} (max 10, most severe first; clean=true ONLY if you genuinely find none).",
+      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nBUILD TO TEST:\n${String(build).slice(0, 60000)}`,
+      { model, json: true, temperature: 0.2 }
+    );
+    const p = JSON.parse(txt);
+    const bugs = Array.isArray(p.bugs) ? p.bugs.map((b) => String(b).slice(0, 240)).filter(Boolean).slice(0, 10) : [];
+    return { clean: !!p.clean && !bugs.length, bugs };
+  } catch {
+    return { clean: true, bugs: [] };
+  }
+}
+
+async function qaAndFixBuild(build, task, model) {
+  if (!ai || !model || !build || build.length < 200) return build;
+  try { addEvent({ kind: "review", text: `Scout is QA-testing "${task.title}"…`, taskId: task.id, agentId: "scout" }); } catch {}
+  const qa = await qaTestBuild(build, task, model);
+  if (qa.clean || !qa.bugs.length) {
+    try { addEvent({ kind: "system", text: `Scout QA: "${task.title}" passed — no bugs found.`, taskId: task.id, agentId: "scout" }); } catch {}
+    return build;
+  }
+  try { addEvent({ kind: "redo", text: `Scout's QA found ${qa.bugs.length} issue(s) in "${task.title}" — Orbit is fixing…`, taskId: task.id, agentId: task.assignedTo || "orbit" }); } catch {}
+  try {
     const fixed = await generate(
-      "You are ORBIT doing a STRICT QA pass on the project you just built, BEFORE it ships. Return the COMPLETE corrected project (same \"===== FILE: path =====\" markers, full files) with EVERY bug fixed — keep whatever already works. This applies to ANY stack (web, mobile app, or backend/API).\n" +
-        "Audit and FIX bugs across LOGIC and UX/UI:\n" +
-        "1) INTENT MATCH — every behaviour/feature the task implies is actually implemented and behaves correctly. E.g. if tapping a card should FLIP it to reveal details, tapping MUST flip the card — NOT just toggle an 'activated' label; if a button says 'Activate', the card must visibly become activated; if an endpoint should return X, it must.\n" +
-        "2) LOGIC — control flow, state, calculations, validation, data handling and edge cases are correct; fix logic errors.\n" +
-        "3) WIRED INTERACTIONS — every control / route / handler works and does the right thing; navigation and routing are correct; NO dead buttons or unreachable screens.\n" +
-        "4) VISIBLE STATE — actions update the UI/data (activation changes the card, top-up updates the balance & transactions, a save persists, etc.).\n" +
-        "5) UX/UI — NO OVERFLOWING or clipped content, NO overlapping elements, layout holds at the target size, readable contrast, sensible spacing.\n" +
-        "6) NO code that errors or silently does nothing — selectors/IDs/imports/paths must resolve.\n" +
-        "Output ONLY the full corrected files. Do not shorten or summarise the project.",
-      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nTHE PROJECT YOU BUILT (audit and fix it):\n${String(build).slice(0, 60000)}`,
+      "You are ORBIT. Independent QA (Scout) tested your build and found the bugs below. FIX EVERY ONE and return the COMPLETE corrected project (same \"===== FILE: path =====\" markers, full files) — keep whatever already works, do not shorten the project.\n\nBUGS TO FIX:\n- " + qa.bugs.join("\n- "),
+      `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nYOUR BUILD:\n${String(build).slice(0, 60000)}`,
       { model, maxOutputTokens: BUILD_MAX_TOKENS, temperature: 0.3 }
     );
-    // Guard: only accept the audited version if it's substantial (not truncated/empty).
     return fixed && fixed.length > build.length * 0.6 ? fixed : build;
   } catch {
     return build;
@@ -287,10 +306,10 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
       ? "\n\nTools: request_help (consult another department), http_request (actually call an API to test it — use {{NAME}} placeholders for secrets), request_credentials (ask the human for sandbox keys). Actually run tests with http_request and report real responses; if you lack a credential, call request_credentials. Use request_help when another department's expertise would improve the result."
       : "\n\nTool: request_help — consult another department's specialist when their expertise would genuinely improve your deliverable (e.g. ask Observatory to research something, Development to sanity-check code, Security for a risk check). Use it sparingly, then fold their answer into your work.";
     const out = await generateWithTools(system + toolNote, userPrompt, { model, media, tools, toolCtx, maxOutputTokens: isBuild ? BUILD_MAX_TOKENS : undefined });
-    return (isBuild ? await selfAuditBuild(out, task, model) : out) || `Done: ${task.title}.`;
+    return (isBuild ? await qaAndFixBuild(out, task, model) : out) || `Done: ${task.title}.`;
   }
   const out = await generate(system, userPrompt, { model, media, maxOutputTokens: isBuild ? BUILD_MAX_TOKENS : undefined });
-  return (isBuild ? await selfAuditBuild(out, task, model) : out) || `Done: ${task.title}.`;
+  return (isBuild ? await qaAndFixBuild(out, task, model) : out) || `Done: ${task.title}.`;
 }
 
 /* Router: pick the single best department for a task (so "Any" goes to the
