@@ -387,7 +387,7 @@ function StatCard({ label, value, sub, color }) {
   );
 }
 
-function StatsView({ stats, tasks, agents }) {
+function StatsView({ stats, tasks, agents, onOpenTask }) {
   const ts = Object.values(tasks);
   const cnt = (pred) => ts.filter(pred).length;
   const done = cnt((t) => t.status === "done");
@@ -428,7 +428,7 @@ function StatsView({ stats, tasks, agents }) {
           const liveA = agents.find((a) => a.id === w.id);
           const st = liveA?.status === "working" ? "working" : liveA?.status === "thinking" ? "thinking" : "idle";
           return (
-            <div key={w.id} style={SS.teamStatRow}>
+            <div key={w.id} style={{ ...SS.teamStatRow, ...(liveA?.currentTaskId ? { cursor: "pointer" } : {}) }} onClick={() => liveA?.currentTaskId && onOpenTask?.(liveA.currentTaskId)} title={liveA?.currentTaskId ? "Open current task" : undefined}>
               <span style={{ ...SS.statDot, background: w.color }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={SS.docTitle}>{w.name} <span style={{ color: "#5e7088", fontWeight: 400 }}>· {w.role}</span></div>
@@ -553,6 +553,7 @@ export default function AgentOffice() {
   const [followText, setFollowText] = useState("");
   const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
   const [composeMode, setComposeMode] = useState("task");
+  const [toasts, setToasts] = useState([]);
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -658,6 +659,24 @@ export default function AgentOffice() {
       jayQueue.current.push({ room: ag.room, name: ag.name, task });
     }
     if (jayQueue.current.length > 5) jayQueue.current = jayQueue.current.slice(-5);
+  }, [events]);
+
+  // Toasts: notify when one of YOUR tasks completes or fails (any page).
+  const toastEvtRef = useRef(0);
+  useEffect(() => {
+    const rel = events.filter((e) => ["done", "fail"].includes(e.kind) && e.taskId);
+    if (!rel.length) return;
+    const maxId = Math.max(...rel.map((e) => e.id));
+    if (toastEvtRef.current === 0) { toastEvtRef.current = maxId; return; } // skip history
+    const fresh = rel.filter((e) => e.id > toastEvtRef.current);
+    toastEvtRef.current = maxId;
+    for (const e of fresh) {
+      const t = tasks[e.taskId];
+      if (!t || t.createdBy !== "user") continue; // only your tasks
+      const ok = e.kind === "done";
+      setToasts((prev) => [...prev, { id: e.id, ok, title: t.title }].slice(-4));
+      setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== e.id)), 8000);
+    }
   }, [events]);
 
   // Completion bubble: when an agent finishes, it tells Jay Jay "done!".
@@ -950,7 +969,7 @@ export default function AgentOffice() {
 
         {view === "projects" && <ProjectsView documents={documents} byId={byId} onOpen={openDoc} onDownload={downloadCode} />}
 
-        {view === "stats" && <StatsView stats={stats} tasks={tasks} agents={agents} />}
+        {view === "stats" && <StatsView stats={stats} tasks={tasks} agents={agents} onOpenTask={setSelected} />}
 
         {view === "issues" && <IssuesView issues={issues} byId={byId} onClearAll={clearIssues} onResolve={resolveIssue} onRetry={(i) => {
           if (!i.taskId) { alert("This issue has no task to retry — dismissing it."); resolveIssue(i.id); return; }
@@ -961,6 +980,18 @@ export default function AgentOffice() {
 
         {PLACEHOLDER[view] && <Placeholder icon={PLACEHOLDER[view].icon} title={PLACEHOLDER[view].title} desc={PLACEHOLDER[view].desc} />}
       </main>
+
+      {toasts.length > 0 && (
+        <div style={SS.globalToasts}>
+          {toasts.map((t) => (
+            <div key={t.id} style={{ ...SS.taskToast, borderColor: t.ok ? "#2f6f49" : "#7a2e3e" }} onClick={() => setSelected(t.id)} title="Open task">
+              <span style={{ color: t.ok ? "#4ade80" : "#fb5570", fontWeight: 800 }}>{t.ok ? "✓" : "✗"}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><b>{t.ok ? "Completed" : "Failed"}:</b> {t.title}</span>
+              <button style={SS.bannerClose} onClick={(e) => { e.stopPropagation(); setToasts((p) => p.filter((x) => x.id !== t.id)); }}><X size={13} /></button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {selectedTask && (
         <div style={SS.modalBg} onClick={() => setSelected(null)}>
@@ -1134,6 +1165,8 @@ const SS = {
   h1: { margin: 0, fontSize: 22, fontWeight: 800, color: "#e8edff", display: "flex", alignItems: "center", gap: 10 },
   pausedChip: { fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fca5b5", border: "1px solid #fb557066", background: "#fb55701a", borderRadius: 99, padding: "3px 8px" },
   toastWrap: { position: "fixed", right: 18, bottom: 18, zIndex: 60, display: "flex", flexDirection: "column-reverse", gap: 8, width: 340, maxWidth: "calc(100vw - 36px)" },
+  globalToasts: { position: "fixed", right: 18, bottom: 18, zIndex: 80, display: "flex", flexDirection: "column-reverse", gap: 8, width: 340, maxWidth: "calc(100vw - 36px)" },
+  taskToast: { display: "flex", alignItems: "center", gap: 9, fontSize: 12, color: "#e8edff", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 12px", boxShadow: "0 12px 32px rgba(0,0,0,.55)", cursor: "pointer" },
   autoBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#fcd9b6", background: "rgba(234,179,8,.12)", border: "1px solid rgba(234,179,8,.4)", borderRadius: 10, padding: "10px 12px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.45)" },
   idleBanner: { display: "flex", alignItems: "flex-start", gap: 10, fontSize: 11, color: "#cfe3d8", background: "#0c1226", border: "1px solid #243358", borderRadius: 10, padding: "11px 13px", lineHeight: 1.45, boxShadow: "0 12px 32px rgba(0,0,0,.5)" },
   controls: { display: "flex", gap: 7, flexWrap: "wrap" },
