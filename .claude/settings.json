@@ -45,7 +45,11 @@
       "Bash(unzip -o \"/Users/jeremiah/Downloads/Visa_Card_application_and_payments_app.zip\" -d /tmp/vzip)",
       "Bash(rm -rf vapp)",
       "Bash(mkdir vapp *)",
-      "Bash(unzip -o ~/Downloads/Visa_app_for_payments.zip -d /tmp/vapp)"
+      "Bash(unzip -o ~/Downloads/Visa_app_for_payments.zip -d /tmp/vapp)",
+      "Bash(cd /Users/jeremiah/Documents/RudraProjects/fynco-onboarding *)",
+      "Read(//Users/jeremiah/Documents/RudraProjects/fynco-onboarding/**)",
+      "Bash(grep -oE '<h[12][^>]*>[^<]{3,50}' index.html)",
+      "Bash(perl -0pi -e 's/\\\\$\\\\{DESIGN_BAR\\\\}\\\\$\\\\{rules\\\\}/\\\\${DESIGN_BAR}\\\\${rules}\\\\\\\\n\\\\\\\\n\\\\${CRAFT_BAR}/; s/\\\\$\\\\{DESIGN_BAR\\\\}\\\\\\\\n\\\\\\\\n\\\\$\\\\{STYLING_RULES\\\\}/\\\\${DESIGN_BAR}\\\\\\\\n\\\\\\\\n\\\\${CRAFT_BAR}\\\\\\\\n\\\\\\\\n\\\\${STYLING_RULES}/g' server/gemini.js)"
     ],
     "additionalDirectories": [
       "/Users/jeremiah/Desktop",

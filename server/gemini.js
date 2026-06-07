@@ -43,7 +43,7 @@ function noteFallback(fromModel, msg) {
 }
 const canFallback = (model, msg) => !/flash/i.test(model || "") && !!aiFlash && !!GEMINI_FLASH_MODEL && FALLBACKABLE(msg);
 
-async function callModel(system, prompt, { json = false, temperature = 0.7, model, media } = {}) {
+async function callModel(system, prompt, { json = false, temperature = 0.7, model, media, maxOutputTokens } = {}) {
   const contents = media && media.length
     ? [{ role: "user", parts: [{ text: prompt }, ...media.map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))] }]
     : prompt;
@@ -56,6 +56,7 @@ async function callModel(system, prompt, { json = false, temperature = 0.7, mode
           config: {
             systemInstruction: system,
             temperature,
+            ...(maxOutputTokens ? { maxOutputTokens } : {}),
             ...(json ? { responseMimeType: "application/json" } : {}),
           },
         }),
@@ -95,11 +96,11 @@ async function generate(system, prompt, opts = {}) {
 // Tool-use loop: lets an agent call tools (e.g. http_request to test an API),
 // feeding results back until it produces the final deliverable.
 const withTimeout = (p, ms = TIMEOUT_MS) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("Gemini request timed out")), ms))]);
-async function toolLoop(system, prompt, { model, media, tools, toolCtx }) {
+async function toolLoop(system, prompt, { model, media, tools, toolCtx, maxOutputTokens }) {
   const parts = [{ text: prompt }, ...(media || []).map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))];
   const contents = [{ role: "user", parts }];
   for (let step = 0; step < 8; step++) {
-    const res = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools } }), TIMEOUT_MS);
+    const res = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools, ...(maxOutputTokens ? { maxOutputTokens } : {}) } }), TIMEOUT_MS);
     try { recordUsage(model || GEMINI_MODEL, res.usageMetadata); } catch {}
     const calls = res.functionCalls;
     if (!calls || !calls.length) return (res.text || "").trim();
@@ -112,7 +113,7 @@ async function toolLoop(system, prompt, { model, media, tools, toolCtx }) {
     contents.push({ role: "user", parts: responseParts });
   }
   contents.push({ role: "user", parts: [{ text: "Wrap up now and produce the final deliverable from what you gathered." }] });
-  const final = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), TIMEOUT_MS);
+  const final = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, ...(maxOutputTokens ? { maxOutputTokens } : {}) } }), TIMEOUT_MS);
   try { recordUsage(model || GEMINI_MODEL, final.usageMetadata); } catch {}
   return (final.text || "").trim();
 }
@@ -177,6 +178,14 @@ const DESIGN_BAR =
   "- MOBILE: the app IS the mobile screen — it fills the viewport (responsive, safe-area padding) and looks like the real running app on a phone. NO decorative phone/device frame, bezel, notch, or fake status bar. (On wide desktop you MAY centre it in a plain mobile-width column ~430px, with no device chrome.)\n" +
   "- REALISTIC CARD: gradient background; a gold EMV chip drawn as a small rounded rect with 3-4 thin contact lines (NOT a plain block); a contactless/wifi glyph; the card number as masked dots grouped in 4s ending with 4 real digits; CARD HOLDER name; EXPIRES mm/yy; and the network mark rendered as CLEAN STYLED TEXT — e.g. a bold italic 'VISA' in a sans-serif with letter-spacing — do NOT hand-draw the Visa/Mastercard logo as a complex SVG (it comes out garbled and overlapping). Card aspect ratio ~1.586:1.\n" +
   "- COMPLETE FLOW: build EVERY screen the task implies, in full, with real working navigation between them — do NOT stop after the home/dashboard screen. If the task lists steps (welcome → sign-up/OTP → KYC → account/currency setup → card application → CARD ACTIVATION (show the card + an Activate action + success animation) → set PIN → wallet home → top-up), implement EACH as its own screen. Never skip the activation or success screens. No broken image links — inline SVG, CSS gradients, or emoji only.";
+const BUILD_MAX_TOKENS = 60000;
+// The gap between a 2-3 screen sample and a real product. Be exhaustive.
+const CRAFT_BAR =
+  "SCALE & COMPLETENESS — THIS IS THE #1 MISS: a real onboarding/banking flow is 12-20+ distinct screens and is LONG (well over a thousand lines). Build the ENTIRE journey end to end — every step plus its empty / loading / success / error states — NOT a 2-3 screen sample. Write ALL the code; never stop early, never summarise, never leave '...' or 'rest of the screens here'. If you're running long, keep going — completeness beats brevity.\n" +
+  "CRAFT (what separates pro from generic):\n" +
+  "- Design tokens in :root: a DISTINCTIVE brand identity (NOT default Tailwind/bootstrap blue — choose a real palette), a characterful display font for headings (e.g. a serif like Fraunces, or a strong sans) + Inter for body via Google Fonts, a shadow scale (sm/md/lg), a consistent radius.\n" +
+  "- Real motion on EVERY screen change: transitions with iOS/spring easings such as cubic-bezier(0.32,0.72,0,1) and cubic-bezier(0.34,1.56,0.64,1); staggered fade-up entrances on content; animated success checkmarks; progress bars between steps; skeletons while 'loading'.\n" +
+  "- Considered layout: comfortable spacing, aligned grids, thumb-friendly targets, and absolutely no clipped or overlapping text (verify every label fits its box).";
 const ENG_MULTI =
   "ENGINEERING: Write the FULL project — every file complete, no placeholders, no \"...\". Split into PROPER, separate files (do NOT cram everything into one file). Output EACH file as a marker line \"===== FILE: relative/path.ext =====\" immediately followed by its fenced code block, so it packages into a downloadable .zip with the correct folder structure. Every import / link / href / src / path MUST use the exact file names and resolve. Include a README.md with exact run instructions. Keep prose to a one-line intro; the deliverable is the project.";
 // The #1 reason generated UIs look broken: inventing Tailwind colour/font
@@ -236,12 +245,12 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     if (build && build.type === "app") {
       // Full app/platform in the stack Jay Jay recommended — multi-file project.
       const rules = webStack.has(build.stack) ? `\n\n${STYLING_RULES}` : "";
-      system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}${rules}\n\n${ENG_MULTI}`;
+      system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}${rules}\n\n${CRAFT_BAR}\n\n${ENG_MULTI}`;
     } else if (singleRequested) {
-      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html (inline <style> with your CSS + inline <script>; Tailwind CDN only with a tailwind.config for any custom tokens). Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html (inline <style> with your CSS + inline <script>; Tailwind CDN only with a tailwind.config for any custom tokens). Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
     } else {
       // DEFAULT for web: a proper MULTI-FILE project, not one big HTML.
-      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css (your real design classes), js/app.js (split into modules if helpful), and manifest.json for the PWA. Link css/styles.css and js/app.js with their exact paths. ${ENG_MULTI}`;
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css (your real design classes), js/app.js (split into modules if helpful), and manifest.json for the PWA. Link css/styles.css and js/app.js with their exact paths. ${ENG_MULTI}`;
     }
   }
   const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}`;
@@ -250,10 +259,10 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     const toolNote = agent.department === "development"
       ? "\n\nTools: request_help (consult another department), http_request (actually call an API to test it — use {{NAME}} placeholders for secrets), request_credentials (ask the human for sandbox keys). Actually run tests with http_request and report real responses; if you lack a credential, call request_credentials. Use request_help when another department's expertise would improve the result."
       : "\n\nTool: request_help — consult another department's specialist when their expertise would genuinely improve your deliverable (e.g. ask Observatory to research something, Development to sanity-check code, Security for a risk check). Use it sparingly, then fold their answer into your work.";
-    const out = await generateWithTools(system + toolNote, userPrompt, { model, media, tools, toolCtx });
+    const out = await generateWithTools(system + toolNote, userPrompt, { model, media, tools, toolCtx, maxOutputTokens: isBuild ? BUILD_MAX_TOKENS : undefined });
     return out || `Done: ${task.title}.`;
   }
-  const out = await generate(system, userPrompt, { model, media });
+  const out = await generate(system, userPrompt, { model, media, maxOutputTokens: isBuild ? BUILD_MAX_TOKENS : undefined });
   return out || `Done: ${task.title}.`;
 }
 

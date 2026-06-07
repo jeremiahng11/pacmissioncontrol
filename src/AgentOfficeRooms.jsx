@@ -143,7 +143,11 @@ const Octo = memo(function Octo({ color, size = 60, status = "idle", cto = false
       <rect x="1" y="0" width="11" height="2" fill="#fff" opacity={idle ? 0.05 : 0.12} />
       <rect x="0" y="9" width="13" height="1" fill="#000" opacity="0.18" />
       {idle ? (<g fill="#0b1020"><rect x="3" y="5" width="3" height="1" /><rect x="7" y="5" width="3" height="1" /></g>)
-        : (<g><rect x="3" y="3" width="3" height="4" fill="#fff" /><rect x="7" y="3" width="3" height="4" fill="#fff" /><rect x={4} y={5 + look} width="1.4" height="1.8" fill="#0b1020" /><rect x={8} y={5 + look} width="1.4" height="1.8" fill="#0b1020" /></g>)}
+        : (<g><rect x="3" y="3" width="3" height="4" fill="#fff" /><rect x="7" y="3" width="3" height="4" fill="#fff" />
+            <g className={work ? "iris-scan" : ""} style={{ transformBox: "fill-box", transformOrigin: "center" }}>
+              <rect x={4} y={5 + look} width="1.4" height="1.8" fill="#0b1020" />
+              <rect x={8} y={5 + look} width="1.4" height="1.8" fill="#0b1020" />
+            </g></g>)}
     </svg>
   );
 });
@@ -259,7 +263,7 @@ const Room = memo(function Room({ room, name, color, cto, status, task, departme
       <div className="room-top"><span className="room-name">{roomLabel(room)}</span><span className="room-dots"><i /><i /><i /></span></div>
       <div className="scene" style={{ height: h }}>
         <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={color} work={busy} /></svg>
-        <div className={`walker ${!cto && !ctoAway && status === "working" ? "atwork" : (busy && !ctoAway && !cto ? "busy " + walk : "")}`}>
+        <div className={`walker ${!cto && !ctoAway && status === "working" ? (department === "development" ? "coding" : "atwork") : (busy && !ctoAway && !cto ? "busy " + walk : "")}`}>
           {/* bubbles sit just above the agent and move with it */}
           {!cto && sayText && <div className="speech" style={{ borderColor: color, color }}>{sayText}</div>}
           {!cto && !sayText && status === "working" && <div className="work-bubble" style={{ color, borderColor: color }}>{(WORK_INFO[department] || WORK_INFO._)[0]} {(WORK_INFO[department] || WORK_INFO._)[1]}<span className="work-dots">…</span></div>}
@@ -1526,11 +1530,17 @@ const CSS = `
 .courier-say { animation:popIn .22s ease-out; }
 @keyframes popIn { 0%{opacity:0; transform:translateX(-50%) translateY(5px) scale(.7);} 100%{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} }
 /* a soft pulse under an actively-working agent */
-.walker.busy .oshadow, .walker.atwork .oshadow { animation:shadowPulse 1.3s ease-in-out infinite; }
+.walker.busy .oshadow, .walker.atwork .oshadow, .walker.coding .oshadow { animation:shadowPulse 1.3s ease-in-out infinite; }
 @keyframes shadowPulse { 0%,100%{opacity:.26; width:34px;} 50%{opacity:.5; width:42px;} }
 /* working agent: stays at the workstation with a focused typing lean */
 .walker.atwork { animation:typeLean .85s ease-in-out infinite; }
 @keyframes typeLean { 0%,100%{transform:translateX(-50%) translateY(0) rotate(0deg);} 30%{transform:translateX(-50%) translateY(1px) rotate(.8deg);} 70%{transform:translateX(-50%) translateY(-1px) rotate(-.8deg);} }
+/* Orbit coding: moves between the keyboard and the screens, busily */
+.walker.coding { animation:codeMove 3.4s cubic-bezier(.45,.05,.3,1) infinite; }
+@keyframes codeMove { 0%{left:43%;} 24%{left:43%;} 50%{left:58%;} 74%{left:58%;} 100%{left:43%;} }
+/* eyeballs darting between keyboard (down) and screen (up) while working */
+.iris-scan { animation:irisScan 2.6s ease-in-out infinite; }
+@keyframes irisScan { 0%,12%{transform:translate(0,0);} 28%,40%{transform:translate(-.5px,1.6px);} 56%,70%{transform:translate(.5px,-1.4px);} 88%,100%{transform:translate(0,0);} }
 /* work particles rising from the agent (code symbols for Orbit, etc.) */
 .work-fx { position:absolute; bottom:64%; left:50%; width:0; height:0; z-index:6; pointer-events:none; }
 .work-particle { position:absolute; bottom:0; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; white-space:nowrap; opacity:0; animation:floatUp 2.6s ease-in infinite; }
