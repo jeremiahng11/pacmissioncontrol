@@ -244,7 +244,7 @@ function processPlans() {
     if (t.status === "queued") {
       planning.add(t.id);
       makePlan(t).catch((e) => console.error("[orch] makePlan", e.message)).finally(() => planning.delete(t.id));
-    } else if (t.status === "planning") {
+    } else if (t.status === "planning" || t.status === "in_progress") {
       const kids = getTasks().filter((c) => c.parentId === t.id);
       if (kids.length && kids.every((c) => c.status === "done" || c.status === "failed")) {
         planning.add(t.id);
@@ -267,6 +267,7 @@ async function makePlan(t) {
     created.push(createTask({ title: s.title, prompt: s.prompt, department: s.department, createdBy: "user", parentId: t.id, dependsOn: deps }));
   }
   const chained = created.filter((c) => c.dependsOn && c.dependsOn.length).length;
+  updateTask(t.id, { status: "in_progress" }); // now the sub-tasks are executing
   setAgent("jeremiah", { status: "command", task: "on duty" });
   addEvent({ kind: "assign", text: `Jay Jay split "${t.title}" into ${subs.length} sub-tasks${chained ? ` (${chained} chained)` : ""}`, agentId: "jeremiah", taskId: t.id });
 }
@@ -279,6 +280,7 @@ async function synthesizePlan(t, kids) {
     addEvent({ kind: "fail", text: `Jay Jay ✗ "${t.title}" — sub-tasks failed`, taskId: t.id });
     return;
   }
+  updateTask(t.id, { status: "review" }); // assembling the final deliverable
   setAgent("jeremiah", { status: "thinking", task: `assembling: ${t.title}` });
   addEvent({ kind: "review", text: `Jay Jay is assembling "${t.title}" from ${done.length} sub-tasks…`, agentId: "jeremiah", taskId: t.id });
   const parts = done.map((c) => ({ title: c.title, department: c.department, result: c.result }));

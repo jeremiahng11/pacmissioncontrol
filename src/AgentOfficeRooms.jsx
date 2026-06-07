@@ -50,6 +50,7 @@ const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" 
 const fmtTime = (ms) => { try { return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const EVENT_COLOR = { assign: "#facc15", handoff: "#67e8f9", tool: "#38bdf8", review: "#eab308", done: "#4ade80", redo: "#fb923c", fail: "#fb5570", issue: "#fb5570", system: "#9db0c8" };
 const WORK_INFO = { development: ["</>", "coding"], observatory: ["◎", "scanning"], research_lab: ["✎", "writing"], security: ["⛨", "auditing"], admin: ["▤", "sorting"], _: ["•", "working"] };
+const PREVIEW_DEVICES = [["mobile", "Mobile", 390], ["mobileL", "Mobile L", 430], ["tablet", "Tablet", 768], ["desktop", "Desktop", 1280]];
 
 const fmtCadence = (r) => {
   if (r.cadenceType === "interval") return r.everyMinutes >= 60 && r.everyMinutes % 60 === 0 ? `every ${r.everyMinutes / 60}h` : `every ${r.everyMinutes}m`;
@@ -257,11 +258,12 @@ const Room = memo(function Room({ room, name, color, cto, status, task, departme
       <div className="room-top"><span className="room-name">{roomLabel(room)}</span><span className="room-dots"><i /><i /><i /></span></div>
       <div className="scene" style={{ height: h }}>
         <svg className="room-art" viewBox="0 0 260 150" preserveAspectRatio="none"><RoomArt room={room} color={color} work={busy} /></svg>
-        {sayText && !cto && <div className="speech" style={{ borderColor: color, color }}>{sayText}</div>}
-        {status === "thinking" && <div className="cue" style={{ color }}>?</div>}
-        {status === "idle" && <div className="cue zzz">z z z</div>}
-        {status === "working" && !cto && <div className="work-bubble" style={{ color, borderColor: color }}>{(WORK_INFO[department] || WORK_INFO._)[0]} {(WORK_INFO[department] || WORK_INFO._)[1]}<span className="work-dots">…</span></div>}
         <div className={`walker ${busy && !ctoAway && !cto ? "busy " + walk : ""}`}>
+          {/* bubbles sit just above the agent and move with it */}
+          {!cto && sayText && <div className="speech" style={{ borderColor: color, color }}>{sayText}</div>}
+          {!cto && !sayText && status === "working" && <div className="work-bubble" style={{ color, borderColor: color }}>{(WORK_INFO[department] || WORK_INFO._)[0]} {(WORK_INFO[department] || WORK_INFO._)[1]}<span className="work-dots">…</span></div>}
+          {!cto && !sayText && status === "thinking" && <div className="cue" style={{ color }}>?</div>}
+          {!cto && !sayText && status === "idle" && <div className="cue zzz">z z z</div>}
           <div className="oshadow" style={ctoAway ? { opacity: 0 } : undefined} />
           {!ctoAway && <Octo color={color} size={cto ? 76 : 56} status={status} cto={cto} />}
         </div>
@@ -589,6 +591,7 @@ export default function AgentOffice() {
   const [palette, setPalette] = useState(false);
   const [pq, setPq] = useState("");
   const [preview, setPreview] = useState(null); // document id being previewed
+  const [previewW, setPreviewW] = useState("mobile");
 
   const downloadFrom = (href) => {
     const a = document.createElement("a");
@@ -1084,13 +1087,18 @@ export default function AgentOffice() {
           <div style={SS.previewCard} onClick={(e) => e.stopPropagation()}>
             <div style={SS.previewHead}>
               <span style={SS.previewTitle}><Eye size={13} /> LIVE PREVIEW</span>
+              <div style={SS.previewDevices}>
+                {PREVIEW_DEVICES.map(([k, label, w]) => (
+                  <button key={k} style={{ ...SS.previewDevBtn, ...(previewW === k ? SS.previewDevOn : {}) }} onClick={() => setPreviewW(k)} title={`${label} · ${w}px`}>{label}</button>
+                ))}
+              </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <a href={`/api/documents/${preview}/preview/`} target="_blank" rel="noopener noreferrer" style={SS.previewLink}>Open full ↗</a>
                 <button style={SS.modalClose} onClick={() => setPreview(null)}><X size={16} /></button>
               </div>
             </div>
             <div style={SS.previewBody}>
-              <iframe key={preview} title="Live preview" src={`/api/documents/${preview}/preview/`} sandbox="allow-scripts allow-forms allow-modals allow-popups" style={SS.previewFrame} />
+              <iframe key={preview} title="Live preview" src={`/api/documents/${preview}/preview/`} sandbox="allow-scripts allow-forms allow-modals allow-popups" style={{ ...SS.previewFrame, width: `min(${(PREVIEW_DEVICES.find((d) => d[0] === previewW) || PREVIEW_DEVICES[0])[2]}px, 100%)` }} />
             </div>
           </div>
         </div>
@@ -1442,12 +1450,15 @@ const SS = {
   downloadBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   ghostBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #243358", background: "transparent", color: "#9db0c8", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   previewBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: "1px solid #4ade80", background: "#4ade80", color: "#08130c", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
-  previewCard: { display: "flex", flexDirection: "column", width: "min(440px, calc(100vw - 28px))", height: "min(880px, 92vh)", background: "#0b1020", border: "1px solid #243358", borderRadius: 16, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.6)" },
-  previewHead: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #18223e", flexShrink: 0 },
-  previewTitle: { display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#4ade80", fontFamily: MONO },
-  previewLink: { fontSize: 11, color: "#9db0c8", textDecoration: "none", fontFamily: MONO },
-  previewBody: { flex: 1, minHeight: 0, background: "#fff" },
-  previewFrame: { width: "100%", height: "100%", border: "none", display: "block", background: "#fff" },
+  previewCard: { display: "flex", flexDirection: "column", width: "min(1340px, calc(100vw - 28px))", height: "min(940px, 93vh)", background: "#0b1020", border: "1px solid #243358", borderRadius: 16, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.6)" },
+  previewHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 14px", borderBottom: "1px solid #18223e", flexShrink: 0 },
+  previewTitle: { display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#4ade80", fontFamily: MONO, flexShrink: 0 },
+  previewDevices: { display: "flex", gap: 3, padding: 3, background: "#0a1020", border: "1px solid #1a2440", borderRadius: 8 },
+  previewDevBtn: { padding: "5px 9px", borderRadius: 6, border: "none", background: "transparent", color: "#8aa0c0", fontWeight: 700, fontSize: 9.5, letterSpacing: 0.5, cursor: "pointer", fontFamily: MONO, whiteSpace: "nowrap" },
+  previewDevOn: { background: "#4ade80", color: "#08130c" },
+  previewLink: { fontSize: 11, color: "#9db0c8", textDecoration: "none", fontFamily: MONO, whiteSpace: "nowrap" },
+  previewBody: { flex: 1, minHeight: 0, display: "flex", justifyContent: "center", background: "#0a0e1a", overflow: "auto" },
+  previewFrame: { height: "100%", border: "none", display: "block", background: "#fff", boxShadow: "0 0 0 1px #243358", flexShrink: 0 },
   delBtn: { display: "flex", alignItems: "center", gap: 6, padding: "8px 11px", borderRadius: 8, border: "1px solid rgba(251,85,112,.4)", background: "rgba(251,85,112,.1)", color: "#fca5b5", fontWeight: 700, fontSize: 9.5, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   bannerClose: { background: "transparent", border: "none", color: "#8aa0c0", cursor: "pointer", padding: 2, display: "flex", flexShrink: 0 },
 };
@@ -1480,8 +1491,8 @@ const CSS = `
 .jay-bob { animation:jayBob 2.4s ease-in-out infinite; display:block; }
 .courier-say { position:absolute; bottom:100%; margin-bottom:4px; font-family:'JetBrains Mono'; font-weight:700; font-size:9px; color:#fde68a; background:#070a14; border:1px solid #facc15; border-radius:6px; padding:3px 8px; white-space:nowrap; max-width:220px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 0 10px #facc1555; }
 .agent-tag { position:absolute; bottom:2px; left:0; right:0; text-align:center; font-family:'Press Start 2P',monospace; font-size:7px; letter-spacing:1px; opacity:.85; z-index:2; }
-.speech { position:absolute; top:10px; left:50%; transform:translateX(-50%); font-size:9px; font-family:'JetBrains Mono'; background:#070a14; border:1px solid; border-radius:6px; padding:2px 7px; z-index:4; white-space:nowrap; }
-.cue { position:absolute; left:50%; transform:translateX(-50%); top:30px; font-family:'Press Start 2P',monospace; font-size:11px; z-index:4; animation:cueFloat 1.4s ease-in-out infinite; }
+.speech { position:absolute; bottom:100%; margin-bottom:5px; left:50%; transform:translateX(-50%); font-size:9px; font-family:'JetBrains Mono'; background:#070a14; border:1px solid; border-radius:6px; padding:2px 7px; z-index:7; white-space:nowrap; }
+.cue { position:absolute; left:50%; transform:translateX(-50%); bottom:100%; margin-bottom:6px; font-family:'Press Start 2P',monospace; font-size:11px; z-index:7; animation:cueFloat 1.4s ease-in-out infinite; }
 .cue.zzz { font-size:8px; color:#64786d; letter-spacing:2px; }
 @keyframes cueFloat { 0%,100%{transform:translateX(-50%) translateY(0);opacity:.6;} 50%{transform:translateX(-50%) translateY(-4px);opacity:1;} }
 @keyframes octoBob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
@@ -1496,10 +1507,19 @@ const CSS = `
 .spin { animation:spin 1.3s linear infinite; } @keyframes spin { to{transform:rotate(360deg);} }
 .code-type { animation:codeType 1.8s ease-in-out infinite; } @keyframes codeType { 0%{transform:scaleX(.04);} 55%{transform:scaleX(1);} 100%{transform:scaleX(1);} }
 .code-cursor { animation:blink .9s step-end infinite; } @keyframes blink { 0%,49%{opacity:1;} 50%,100%{opacity:0;} }
-.work-bubble { position:absolute; top:6px; left:50%; transform:translateX(-50%); z-index:6; font-family:'JetBrains Mono'; font-weight:700; font-size:8px; letter-spacing:.5px; padding:2px 8px; border-radius:99px; background:rgba(7,10,20,.88); border:1px solid currentColor; white-space:nowrap; box-shadow:0 0 10px rgba(0,0,0,.4); animation:workPulse 1.7s ease-in-out infinite; }
+.work-bubble { position:absolute; bottom:100%; margin-bottom:5px; left:50%; transform:translateX(-50%); z-index:7; font-family:'JetBrains Mono'; font-weight:700; font-size:8px; letter-spacing:.5px; padding:2px 8px; border-radius:99px; background:rgba(7,10,20,.92); border:1px solid currentColor; white-space:nowrap; box-shadow:0 0 10px rgba(0,0,0,.4); animation:workPulse 1.7s ease-in-out infinite; }
 @keyframes workPulse { 0%,100%{opacity:.6;} 50%{opacity:1;} }
 .work-dots { animation:blink 1s step-end infinite; }
 .courier-say.thinking { animation:workPulse 1.4s ease-in-out infinite; }
+/* bubbles point down at the agent + pop in */
+.speech::after, .work-bubble::after { content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); width:0; height:0; border:4px solid transparent; border-top-color:#070a14; }
+.speech { animation:popIn .22s ease-out; }
+.work-bubble { animation:popIn .22s ease-out, workPulse 1.7s ease-in-out infinite; }
+.courier-say { animation:popIn .22s ease-out; }
+@keyframes popIn { 0%{opacity:0; transform:translateX(-50%) translateY(5px) scale(.7);} 100%{opacity:1; transform:translateX(-50%) translateY(0) scale(1);} }
+/* a soft pulse under an actively-working agent */
+.walker.busy .oshadow { animation:shadowPulse 1.3s ease-in-out infinite; }
+@keyframes shadowPulse { 0%,100%{opacity:.26; width:34px;} 50%{opacity:.5; width:42px;} }
 .mc-marquee { animation:marq 26s linear infinite; will-change:transform; } @keyframes marq { from{transform:translateX(0);} to{transform:translateX(-50%);} }
 .mc-btn:hover { filter:brightness(1.15); } .mc-btn:active { transform:scale(.97); }
 `;
