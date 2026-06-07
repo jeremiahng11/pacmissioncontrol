@@ -42,7 +42,10 @@
       "Bash(grep -n \"const agents\\\\b\\\\|agents = \\\\|agents}\\\\|{ agents\\\\|agents,\\\\|agents\\\\.map\\\\|agents\\\\.find\" src/AgentOfficeRooms.jsx)",
       "Bash(rm -rf vzip)",
       "Bash(mkdir vzip *)",
-      "Bash(unzip -o \"/Users/jeremiah/Downloads/Visa_Card_application_and_payments_app.zip\" -d /tmp/vzip)"
+      "Bash(unzip -o \"/Users/jeremiah/Downloads/Visa_Card_application_and_payments_app.zip\" -d /tmp/vzip)",
+      "Bash(rm -rf vapp)",
+      "Bash(mkdir vapp *)",
+      "Bash(unzip -o ~/Downloads/Visa_app_for_payments.zip -d /tmp/vapp)"
     ],
     "additionalDirectories": [
       "/Users/jeremiah/Desktop",

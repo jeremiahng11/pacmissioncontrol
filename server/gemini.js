@@ -174,6 +174,15 @@ const DESIGN_BAR =
   "DESIGN BAR (aim for top-fintech polish — Revolut / Wise / Monzo): a deliberate colour palette, gradients, soft shadows, generous spacing, clear type hierarchy, rounded corners, and smooth transitions / micro-interactions. Mobile-first where relevant (realistic phone frame ~390px wide, safe-area padding). NEVER use broken external image links — use inline SVG, CSS gradients, or emoji. For a payment/credit card, render a realistic card (gradient, EMV chip, contactless glyph, masked number, holder name, expiry, Visa/Mastercard mark, ~1.586:1). Build every screen the flow implies with working navigation.";
 const ENG_MULTI =
   "ENGINEERING: Write the FULL project — every file complete, no placeholders, no \"...\". Split into PROPER, separate files (do NOT cram everything into one file). Output EACH file as a marker line \"===== FILE: relative/path.ext =====\" immediately followed by its fenced code block, so it packages into a downloadable .zip with the correct folder structure. Every import / link / href / src / path MUST use the exact file names and resolve. Include a README.md with exact run instructions. Keep prose to a one-line intro; the deliverable is the project.";
+// The #1 reason generated UIs look broken: inventing Tailwind colour/font
+// utilities (text-brand-blue, bg-primary) without configuring them — Tailwind
+// silently ignores them and the page renders unstyled.
+const STYLING_RULES =
+  "STYLING — READ CAREFULLY (this is the #1 thing that makes generated UIs look broken, so get it right):\n" +
+  "- A Tailwind class for a CUSTOM colour/font (e.g. text-brand-blue, bg-primary, text-text-secondary) does NOTHING unless you define it. If you use the Tailwind CDN with ANY custom token, you MUST add this BEFORE using it: <script>tailwind.config={theme:{extend:{colors:{ /* every custom colour you reference */ }, fontFamily:{ /* custom fonts */ }}}}</script>. Undefined utilities are silently dropped and the UI looks unstyled.\n" +
+  "- SAFEST APPROACH (prefer this): write your visual design as real CSS classes in css/styles.css (e.g. .btn-primary, .card, .screen) using CSS variables — and apply THOSE class names in the HTML. Use Tailwind only for layout/spacing with its BUILT-IN classes (flex, p-4, rounded-2xl, text-slate-900). Do NOT reference a CSS variable via a made-up Tailwind class name.\n" +
+  "- NEVER mix the two by mistake: if css defines --text-primary, the HTML must use color:var(--text-primary) (or a real .class), NOT a class called text-text-primary.\n" +
+  "- Final self-check: every class in the HTML is either a real Tailwind built-in OR defined in tailwind.config OR a class you wrote in styles.css. No invented utilities.";
 const STACK_GUIDE = {
   django: "Stack: Django (Python). Deliver manage.py, the project package (settings.py with INSTALLED_APPS, urls.py, wsgi.py), app(s) with models.py / views.py / urls.py / admin.py, templates/ and static/ (css, js) for the UI, requirements.txt, and README.md (venv, pip install, migrate, runserver).",
   node: "Stack: Node.js. Deliver package.json (scripts + deps), an Express or Fastify server, routes, and a front-end (server-rendered views or a public/ folder with separate html/css/js), plus README.md (npm install, npm start).",
@@ -218,14 +227,16 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
   let system = docSystem;
   if (isBuild) {
     const singleRequested = /\b(single|one)[-\s]?(file|html|page)\b|self-?contained|inline (everything|all|css)/i.test(`${task.title} ${task.prompt}`);
+    const webStack = new Set(["static", "node", "react", "django"]);
     if (build && build.type === "app") {
       // Full app/platform in the stack Jay Jay recommended — multi-file project.
-      system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}\n\n${ENG_MULTI}`;
+      const rules = webStack.has(build.stack) ? `\n\n${STYLING_RULES}` : "";
+      system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}${rules}\n\n${ENG_MULTI}`;
     } else if (singleRequested) {
-      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html (Tailwind via CDN + a clean Google Font, inline <style>/<script>). Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html (inline <style> with your CSS + inline <script>; Tailwind CDN only with a tailwind.config for any custom tokens). Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
     } else {
       // DEFAULT for web: a proper MULTI-FILE project, not one big HTML.
-      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css, js/app.js (split into modules if helpful), and manifest.json for the PWA. Load Tailwind via CDN AND your own css/styles.css; link js/app.js — every <link>/<script>/href must use the exact file paths and resolve. ${ENG_MULTI}`;
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${STYLING_RULES}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css (your real design classes), js/app.js (split into modules if helpful), and manifest.json for the PWA. Link css/styles.css and js/app.js with their exact paths. ${ENG_MULTI}`;
     }
   }
   const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}`;
