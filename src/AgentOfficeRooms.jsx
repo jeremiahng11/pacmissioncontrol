@@ -622,11 +622,11 @@ export default function AgentOffice() {
   const composer = (
     <form style={SS.compose} onSubmit={submit}>
       <div style={{ display: "flex", gap: 6 }}>
-        <select style={{ ...SS.select, flex: 1 }} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
+        <select style={{ ...SS.select, flex: 1, minWidth: 0 }} value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}>
           {DEPT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <select style={{ ...SS.select, flex: 1 }} value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}>
-          <option value="normal">Normal priority</option>
+        <select style={{ ...SS.select, flex: 1, minWidth: 0 }} value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}>
+          <option value="normal">Normal</option>
           <option value="high">High priority</option>
           <option value="low">Low priority</option>
         </select>
@@ -1101,8 +1101,8 @@ const SS = {
   routineMeta: { fontSize: 10, color: "#8aa0c0", marginTop: 2 },
   secTitle: { fontSize: 9, letterSpacing: 1.5, color: "#5e7088", fontWeight: 700, margin: "2px 0" },
   compose: { display: "flex", flexDirection: "column", gap: 7 },
-  select: { padding: "8px 9px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11 },
-  input: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 12 },
+  select: { padding: "8px 9px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11, boxSizing: "border-box", width: "100%", maxWidth: "100%" },
+  input: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 12, boxSizing: "border-box", width: "100%", maxWidth: "100%" },
   textarea: { padding: "9px 10px", borderRadius: 7, border: "1px solid #243358", background: "#070a14", color: "#e8edff", fontFamily: MONO, fontSize: 11, resize: "vertical" },
   assignBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px", borderRadius: 7, border: "1px solid #a855f7", background: "#a855f7", color: "#0b1020", fontWeight: 700, fontSize: 10, letterSpacing: 1, cursor: "pointer", fontFamily: MONO },
   attachBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 7, border: "1px dashed #3a4a66", background: "transparent", color: "#9db0c8", fontSize: 10, cursor: "pointer", fontFamily: MONO },
