@@ -195,6 +195,10 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
         <rect x="12" y="10" width="150" height="52" rx="3" fill="#04060d" stroke={c} strokeOpacity="0.5" />
         {[[24, 22], [50, 38], [78, 18], [104, 44], [130, 26], [150, 48], [40, 52]].map(([x, y], i) => (<rect key={i} x={x} y={y} width="2.5" height="2.5" fill="#cfe3ff" className="tw" style={{ animationDelay: `${i * 0.4}s` }} />))}
         <circle cx="142" cy="26" r="9" fill={c} opacity="0.35" />
+        {work && (<g>
+          <line x1="87" y1="36" x2="87" y2="12" stroke={c} strokeWidth="1.4" opacity="0.65"><animateTransform attributeName="transform" type="rotate" from="0 87 36" to="360 87 36" dur="3s" repeatCount="indefinite" /></line>
+          <circle cx="87" cy="36" r="3" fill="none" stroke={c} strokeWidth="1"><animate attributeName="r" values="3;26" dur="2.2s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.6;0" dur="2.2s" repeatCount="indefinite" /></circle>
+        </g>)}
         <g stroke={c} strokeWidth="2" fill="none"><line x1="34" y1="138" x2="50" y2="104" /><line x1="64" y1="138" x2="50" y2="104" /></g>
         <rect x="46" y="92" width="30" height="9" rx="4" fill={c} opacity="0.85" transform="rotate(-26 61 96)" />
         {desk(196, 54)}{screen(206, 92, 34, 16, 2)}
@@ -212,6 +216,7 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
     case "SECURITY":
       furn = (<g>
         {[[16, 10], [60, 10], [104, 10], [16, 40], [60, 40], [104, 40]].map(([x, y], i) => <g key={i}>{screen(x, y, 38, 24, 2)}</g>)}
+        {work && (<line x1="14" y1="10" x2="144" y2="10" stroke={c} strokeWidth="1.4" opacity="0.55"><animate attributeName="y1" values="10;66;10" dur="2.4s" repeatCount="indefinite" /><animate attributeName="y2" values="10;66;10" dur="2.4s" repeatCount="indefinite" /></line>)}
         {desk(180, 64)}{screen(190, 88, 44, 18, 2)}
         <g><rect x="150" y="86" width="10" height="48" rx="3" fill="#04060d" stroke={c} strokeOpacity="0.5" />{["#fb5570", "#eab308", "#4ade80"].map((col, i) => (<circle key={i} cx="155" cy={94 + i * 12} r="3.4" fill={col} className="tw" style={{ animationDelay: `${i * 0.5}s` }} />))}</g>
       </g>);
@@ -219,6 +224,7 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
     case "RESEARCH LAB":
       furn = (<g>
         {[14, 30, 46].map((y, i) => (<g key={i}><rect x="12" y={y} width="120" height="5" rx="1" fill="none" stroke={c} strokeOpacity="0.4" strokeWidth="1" />{[18, 40, 62, 84, 106].map((x, j) => (<rect key={j} x={x} y={y - 6} width="6" height="6" rx="1" fill={c} opacity="0.4" />))}</g>))}
+        {work && (<rect x="14" y="9" width="2.4" height="6" fill="#e8edff"><animate attributeName="x" values="14;128;14;128;14" dur="6s" repeatCount="indefinite" /><animate attributeName="y" values="9;9;25;25;41" dur="6s" repeatCount="indefinite" /><animate attributeName="opacity" values="1;0.2;1" dur="0.6s" repeatCount="indefinite" /></rect>)}
         <rect x="150" y="104" width="96" height="6" rx="2" fill={c} opacity="0.5" />
         {[160, 188, 216].map((x, i) => (<g key={i}><path d={`M${x},92 L${x},100 L${x - 5},108 L${x + 11},108 L${x + 6},100 L${x + 6},92 Z`} fill="#04060d" stroke={c} strokeOpacity="0.6" /><rect x={x - 3} y="102" width="12" height="5" fill={c} opacity={on} /><circle cx={x + 3} cy="98" r="1.6" fill={c} className="tw" style={{ animationDelay: `${i * 0.5}s` }} /></g>))}
         <g transform="translate(34,118)" fill={c}><rect x="-2" y="0" width="4" height="16" opacity="0.5" /><circle cx="0" cy="-2" r="5" opacity="0.7" /><circle cx="-7" cy="2" r="5" opacity="0.6" /><circle cx="7" cy="2" r="5" opacity="0.6" /></g>
@@ -246,6 +252,7 @@ const RoomArt = memo(function RoomArt({ room, color, work }) {
     case "ARCHIVE":
       furn = (<g>
         {[10, 34, 58].map((y, i) => (<g key={i}><rect x="12" y={y} width="150" height="20" rx="1" fill="none" stroke={c} strokeOpacity="0.4" strokeWidth="1" />{[16, 40, 64, 88, 112, 136].map((x, j) => (<rect key={j} x={x} y={y + 3} width="18" height="14" rx="1" fill={c} opacity={0.22 + ((i + j) % 3) * 0.12} />))}</g>))}
+        {work && (<rect x="16" y="13" width="18" height="14" rx="1" fill={c} opacity="0.85"><animate attributeName="x" values="16;136;16" dur="2.6s" repeatCount="indefinite" /><animate attributeName="y" values="13;37;61;37;13" dur="7.8s" repeatCount="indefinite" /></rect>)}
         {[[186, 104], [214, 100], [196, 120]].map(([x, y], i) => (<rect key={i} x={x} y={y} width="26" height="22" rx="2" fill="#04060d" stroke={c} strokeOpacity="0.5" />))}
         <g stroke={c} strokeWidth="2" opacity="0.5"><line x1="240" y1="86" x2="240" y2="138" /><line x1="252" y1="86" x2="252" y2="138" />{[94, 104, 114, 124].map((y, i) => (<line key={i} x1="240" y1={y} x2="252" y2={y} />))}</g>
       </g>);
