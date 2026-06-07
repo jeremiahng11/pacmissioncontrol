@@ -10,7 +10,7 @@ import {
 import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
-import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
+import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL } from "./config.js";
 
 const MAX_ATTEMPTS = 2;
 const GEN_COOLDOWN_MS = 9000; // calmer autonomous cadence when AUTO is on
@@ -64,6 +64,8 @@ async function runTask(agent, task) {
     // (model=null) or runs on the free demo model.
     const isUser = task.createdBy !== "cto";
     const model = isUser ? GEMINI_MODEL : (GEMINI_DEMO_MODEL || null);
+    // Light model (Flash) for the cheap, frequent orchestration calls.
+    const lightModel = isUser ? (GEMINI_FLASH_MODEL || model) : model;
 
     setAgent(agent.id, { status: "working", task: task.title });
     const memoryText = isUser ? getMemoryText(agent.department) : "";
@@ -89,7 +91,7 @@ async function runTask(agent, task) {
     addEvent({ kind: "review", text: `${agent.name} submitted: ${task.title}`, agentId: agent.id, taskId: task.id });
     let verdict;
     try {
-      verdict = await runReview(task, result, model);
+      verdict = await runReview(task, result, lightModel);
     } catch (err) { handleError(agent, task, err); return; }
 
     if (verdict.complete) {
@@ -103,7 +105,7 @@ async function runTask(agent, task) {
         // Real work only: save the deliverable as a document and fold a note
         // into the department's memory so future tasks continue the work.
         upsertDocument({ taskId: task.id, title: task.title, prompt: task.prompt, department: agent.department, agentId: agent.id, content: result });
-        const note = await summarizeForMemory(agent, task, result, model).catch(() => `${task.title} — completed.`);
+        const note = await summarizeForMemory(agent, task, result, lightModel).catch(() => `${task.title} — completed.`);
         const label = `${(DEPARTMENTS[agent.department]?.label) || agent.department} memory`;
         appendMemory(agent.department, `- ${note}`, label, agent.name);
       }

@@ -36,7 +36,8 @@
       "Bash(cd /Users/jeremiah/Documents/RudraProjects/pacmissioncontrol *)",
       "Bash(cat)",
       "Bash(qlmanage -t -s 600 -o . pac2.svg)",
-      "Bash(perl -0pi -e 's/\\\\}\\\\\\), 60000\\\\\\)/}\\), TIMEOUT_MS\\)/g' server/gemini.js)"
+      "Bash(perl -0pi -e 's/\\\\}\\\\\\), 60000\\\\\\)/}\\), TIMEOUT_MS\\)/g' server/gemini.js)",
+      "Bash(perl -0pi -e 's/ai\\\\.models\\\\.generateContent/clientFor\\(model || GEMINI_MODEL\\).models.generateContent/g' server/gemini.js)"
     ],
     "additionalDirectories": [
       "/Users/jeremiah/Desktop",

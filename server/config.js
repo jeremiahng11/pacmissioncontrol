@@ -12,16 +12,20 @@ export const COOKIE_NAME = "mc_session";
 
 export const DATABASE_URL = process.env.DATABASE_URL || "";
 
+// Pro key — used for the heavy, quality-critical work: the agents' deliverables,
+// task planning (decomposition) and synthesis.
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-// Model for the tasks YOU assign (real work). Pro requires billing enabled on
-// the key's Google Cloud project (free-tier limit is 0); use gemini-2.5-flash
-// if billing is not set up.
+// Optional separate key for Flash calls (review, memory notes, AUTO demo). If
+// unset, Flash calls fall back to GEMINI_API_KEY. Lets you bill Pro and Flash
+// on different keys/projects.
+export const GEMINI_FLASH_API_KEY = process.env.GEMINI_FLASH_API_KEY || "";
+// Model for the tasks YOU assign (real work) + planning + synthesis. Pro
+// requires billing enabled on the key's project (free-tier limit is 0).
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
-
-// Model for the AUTO visual demo — defaults to free-tier Flash so the demo
-// produces real output at no cost. Set to "" to make AUTO pure simulation
-// (no API calls at all).
-export const GEMINI_DEMO_MODEL = process.env.GEMINI_DEMO_MODEL ?? "gemini-2.5-flash";
+// Light model for high-frequency, low-stakes orchestration: review, one-line
+// memory notes, and the AUTO demo. Cheap + fast. Set "" to simulate AUTO.
+export const GEMINI_FLASH_MODEL = process.env.GEMINI_FLASH_MODEL || "gemini-2.5-flash";
+export const GEMINI_DEMO_MODEL = process.env.GEMINI_DEMO_MODEL ?? GEMINI_FLASH_MODEL;
 // No key -> the office still runs, with simulated deliverables.
 export const SIMULATE = !GEMINI_API_KEY;
 

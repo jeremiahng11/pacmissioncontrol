@@ -4,11 +4,16 @@
 // office still runs end-to-end.
 
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_API_KEY, GEMINI_MODEL } from "./config.js";
+import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL } from "./config.js";
 import { executeTool } from "./tools.js";
 
-const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
-export const usingGemini = !!ai;
+// Two clients so Pro and Flash can bill on separate keys. Flash falls back to
+// the Pro key if no separate Flash key is set. Calls route by model name.
+const aiPro = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
+const aiFlash = GEMINI_FLASH_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_FLASH_API_KEY }) : aiPro;
+const clientFor = (model) => (/flash/i.test(model || "") ? aiFlash : aiPro) || aiPro;
+const ai = aiPro; // back-compat: presence check / default
+export const usingGemini = !!aiPro;
 
 function isRateLimit(msg) {
   return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
@@ -25,7 +30,7 @@ async function generate(system, prompt, { json = false, temperature = 0.7, model
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await Promise.race([
-        ai.models.generateContent({
+        clientFor(model || GEMINI_MODEL).models.generateContent({
           model: model || GEMINI_MODEL,
           contents,
           config: {
@@ -60,7 +65,7 @@ async function generateWithTools(system, prompt, { model, media, tools, toolCtx 
   const parts = [{ text: prompt }, ...(media || []).map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))];
   const contents = [{ role: "user", parts }];
   for (let step = 0; step < 8; step++) {
-    const res = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools } }), TIMEOUT_MS);
+    const res = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system, temperature: 0.5, tools } }), TIMEOUT_MS);
     const calls = res.functionCalls;
     if (!calls || !calls.length) return (res.text || "").trim();
     contents.push({ role: "model", parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args || {} } })) });
@@ -72,7 +77,7 @@ async function generateWithTools(system, prompt, { model, media, tools, toolCtx 
     contents.push({ role: "user", parts: responseParts });
   }
   contents.push({ role: "user", parts: [{ text: "Wrap up now and produce the final deliverable from what you gathered." }] });
-  const final = await withTimeout(ai.models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), TIMEOUT_MS);
+  const final = await withTimeout(clientFor(model || GEMINI_MODEL).models.generateContent({ model: model || GEMINI_MODEL, contents, config: { systemInstruction: system } }), TIMEOUT_MS);
   return (final.text || "").trim();
 }
 
