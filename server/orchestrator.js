@@ -8,7 +8,7 @@ import {
   upsertDocument, recallMemory, appendMemory, addMemoryNote, createIssue, getAttachments, getTaskCredentials, deleteIssuesForTask,
   recordOutcome, getStats,
 } from "./store.js";
-import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent, classifyDepartment } from "./gemini.js";
+import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent, classifyDepartment, recommendStack } from "./gemini.js";
 import { toolsFor } from "./tools.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL, GEMINI_DAILY_BUDGET_USD } from "./config.js";
@@ -105,9 +105,16 @@ async function runTask(agent, task) {
     const upstream = isUser
       ? (task.dependsOn || []).map((id) => getTask(id)).filter((d) => d && d.status === "done" && d.result).map((d) => ({ title: d.title, result: d.result }))
       : [];
+    // For builds, Jay Jay decides: a UI mockup vs a full app/platform in a real
+    // stack (Django / Node / Flutter / React / React Native).
+    let build = null;
+    if (isUser && agent.department === "development") {
+      build = await recommendStack(task, lightModel).catch(() => null);
+      if (build) addEvent({ kind: "system", text: `Jay Jay: build "${task.title}" as ${build.type === "app" ? build.stack.toUpperCase() + " app" : "a UI mockup"}${build.reason ? " — " + build.reason : ""}`, agentId: "jeremiah", taskId: task.id });
+    }
     let result;
     try {
-      result = await runWork(agent, task, memoryText, model, priorWork, media, tools, toolCtx, upstream);
+      result = await runWork(agent, task, memoryText, model, priorWork, media, tools, toolCtx, upstream, build);
     } catch (err) { handleError(agent, task, err); return; }
     updateTask(task.id, { status: "review", result });
 

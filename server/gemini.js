@@ -170,9 +170,21 @@ const SIM = {
 };
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+const DESIGN_BAR =
+  "DESIGN BAR (aim for top-fintech polish — Revolut / Wise / Monzo): a deliberate colour palette, gradients, soft shadows, generous spacing, clear type hierarchy, rounded corners, and smooth transitions / micro-interactions. Mobile-first where relevant (realistic phone frame ~390px wide, safe-area padding). NEVER use broken external image links — use inline SVG, CSS gradients, or emoji. For a payment/credit card, render a realistic card (gradient, EMV chip, contactless glyph, masked number, holder name, expiry, Visa/Mastercard mark, ~1.586:1). Build every screen the flow implies with working navigation.";
+const ENG_MULTI =
+  "ENGINEERING: Write the FULL project — every file complete, no placeholders, no \"...\". Split into PROPER, separate files (do NOT cram everything into one file). Output EACH file as a marker line \"===== FILE: relative/path.ext =====\" immediately followed by its fenced code block, so it packages into a downloadable .zip with the correct folder structure. Every import / link / href / src / path MUST use the exact file names and resolve. Include a README.md with exact run instructions. Keep prose to a one-line intro; the deliverable is the project.";
+const STACK_GUIDE = {
+  django: "Stack: Django (Python). Deliver manage.py, the project package (settings.py with INSTALLED_APPS, urls.py, wsgi.py), app(s) with models.py / views.py / urls.py / admin.py, templates/ and static/ (css, js) for the UI, requirements.txt, and README.md (venv, pip install, migrate, runserver).",
+  node: "Stack: Node.js. Deliver package.json (scripts + deps), an Express or Fastify server, routes, and a front-end (server-rendered views or a public/ folder with separate html/css/js), plus README.md (npm install, npm start).",
+  flutter: "Stack: Flutter (Dart), Material 3. Deliver pubspec.yaml, lib/main.dart, and lib/ split into screens & widgets, plus README.md (flutter pub get, flutter run).",
+  react: "Stack: React + Vite. Deliver package.json, index.html, vite.config.js, src/main.jsx, src/App.jsx and components in separate files, styling via Tailwind or CSS modules, plus README.md (npm install, npm run dev).",
+  "react-native": "Stack: React Native (Expo) + React Navigation. Deliver package.json, App.js, and screens/components in separate files, plus README.md (npm install, npx expo start).",
+};
+
 /* Worker performs the task, building on the department's memory.
    model=null (or no key) => simulated path: no API call, no cost. */
-export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null, upstream = []) {
+export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null, upstream = [], build = null) {
   if (!ai || !model) {
     await wait(1200 + Math.random() * 1800);
     return !model
@@ -199,26 +211,24 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.`
     : "";
   const isBuild = agent.department === "development";
-  const codeBlock = ""; // dev guidance lives in the build system prompt below
   const docSystem =
     `${agent.persona} Write a clear, well-structured deliverable in Markdown. Start with a "# Title" heading, then a short intro. Use ## / ### section headings, and a dedicated subsection per item (e.g. one per company/option) covering its details. When comparing things, include a Markdown table. Be thorough and specific, not terse. ` +
     `IMPORTANT: You output the DOCUMENT CONTENT as Markdown — the app converts it to a downloadable Word (.doc) file automatically, so if the task asks for a "doc"/"Word"/"PDF", just write the well-formatted Markdown content. Never say you cannot create files or attach a document. ` +
     `No preamble like "Here is" — start directly with the title heading.`;
-  const buildSystem =
-    `${agent.persona}\n\n` +
-    `Build a COMPLETE, WORKING, BEAUTIFUL deliverable — production quality a user would be impressed by, not a prototype.\n\n` +
-    `DESIGN BAR (aim for top-fintech polish — Revolut / Wise / Monzo):\n` +
-    `- Use a real design system. For web, load Tailwind via CDN (<script src="https://cdn.tailwindcss.com"></script>) and a clean Google Font like Inter — polished styling with zero local-file linking.\n` +
-    `- Strong visual craft: a deliberate colour palette, gradients, soft shadows, generous spacing, clear type hierarchy, rounded corners, and smooth transitions / micro-interactions on taps.\n` +
-    `- Mobile-first PWA: design to a realistic phone frame (max-width ~390px, centred on desktop) with safe-area padding; everything must fit and feel native on a phone. Include the viewport meta and a theme-color.\n` +
-    `- Real, believable content. NEVER use broken external image links — use inline SVG, CSS gradients, or emoji. For a payment/credit card, render a realistic card: gradient background, EMV chip, contactless glyph, masked number, holder name, expiry, and a Visa/Mastercard mark, with correct card proportions (~1.586:1).\n` +
-    `- Full flows: build every screen the task implies (e.g. onboarding → KYC → application → activation → top-up → wallet home), with working navigation between them.\n\n` +
-    `ENGINEERING:\n` +
-    `- Deliver a SINGLE self-contained index.html by default (Tailwind via CDN + JS in a <script>), so it runs the instant it's opened. No placeholders, no "...", no "rest here" — write the FULL code.\n` +
-    `- Only split files if truly needed; if you do, link them with EXACT names and verify every href/src/import resolves.\n` +
-    `- Output EACH file as a marker line "===== FILE: relative/path.ext =====" immediately followed by its fenced code block (so it packages into a downloadable .zip). Keep prose to a short intro line; the deliverable is the code.`;
-  const system = isBuild ? buildSystem : docSystem;
-  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}${codeBlock}`;
+  let system = docSystem;
+  if (isBuild) {
+    const singleRequested = /\b(single|one)[-\s]?(file|html|page)\b|self-?contained|inline (everything|all|css)/i.test(`${task.title} ${task.prompt}`);
+    if (build && build.type === "app") {
+      // Full app/platform in the stack Jay Jay recommended — multi-file project.
+      system = `${agent.persona}\n\nBuild a COMPLETE, RUNNABLE project — production quality, not a prototype.\n${STACK_GUIDE[build.stack] || STACK_GUIDE.node}\n\n${DESIGN_BAR}\n\n${ENG_MULTI}`;
+    } else if (singleRequested) {
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\nENGINEERING: The user asked for a SINGLE file, so deliver one self-contained index.html (Tailwind via CDN + a clean Google Font, inline <style>/<script>). Full code, no placeholders. Output it as "===== FILE: index.html =====" then its fenced code block. One-line intro only.`;
+    } else {
+      // DEFAULT for web: a proper MULTI-FILE project, not one big HTML.
+      system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css, js/app.js (split into modules if helpful), and manifest.json for the PWA. Load Tailwind via CDN AND your own css/styles.css; link js/app.js — every <link>/<script>/href must use the exact file paths and resolve. ${ENG_MULTI}`;
+    }
+  }
+  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}`;
 
   if (tools && toolCtx) {
     const toolNote = agent.department === "development"
@@ -263,6 +273,36 @@ export async function classifyDepartment(task, model = null) {
     } catch { /* fall through */ }
   }
   return keywordDept(text);
+}
+
+/* Jay Jay decides HOW Development should build: a quick UI mockup (single
+   self-contained HTML) vs a full app/platform in a real stack he recommends. */
+const BUILD_STACKS = ["static", "django", "node", "flutter", "react", "react-native"];
+export async function recommendStack(task, model = null) {
+  const text = `${task.title}\n${task.prompt || ""}`;
+  const low = text.toLowerCase();
+  const explicit = /\bdjango\b/.test(low) ? "django"
+    : /\bflutter\b/.test(low) ? "flutter"
+    : /(react native|react-native|\bexpo\b)/.test(low) ? "react-native"
+    : /\breact\b/.test(low) ? "react"
+    : /(node\.?js|express|fastify|next\.?js)/.test(low) ? "node" : null;
+  const mockupHint = /(mockup|template|landing page|html template|prototype|single[- ]page|ui kit|design only|just the (ui|design|frontend))/.test(low);
+  if (explicit) return { type: "app", stack: explicit, reason: "you named the stack" };
+  if (ai && model) {
+    try {
+      const txt = await generate(
+        "You are JAY JAY, the CTO, deciding how Development should build this. Is it a MOCKUP (one self-contained HTML/UI prototype) or a full APP/platform (multi-file project, often with a backend or data)? If a full app, recommend ONE stack: django, node, flutter, react, or react-native. Reply ONLY as JSON: {\"type\":\"mockup\"|\"app\",\"stack\":\"static\"|\"django\"|\"node\"|\"flutter\"|\"react\"|\"react-native\",\"reason\":\"<=12 words\"}. stack is \"static\" only when type is mockup.",
+        text.slice(0, 1500),
+        { json: true, temperature: 0, model }
+      );
+      const p = JSON.parse(txt);
+      if (p.type === "app" && BUILD_STACKS.includes(p.stack) && p.stack !== "static") return { type: "app", stack: p.stack, reason: String(p.reason || "").slice(0, 80) };
+      return { type: "mockup", stack: "static", reason: String(p.reason || "UI mockup").slice(0, 80) };
+    } catch { /* fall through */ }
+  }
+  if (mockupHint) return { type: "mockup", stack: "static", reason: "UI mockup" };
+  if (/(full app|platform|backend|rest api|\bapi\b|database|authentication|login system|sign ?up|crud|deploy|server|micro-?service)/.test(low)) return { type: "app", stack: "node", reason: "app with backend" };
+  return { type: "mockup", stack: "static", reason: "front-end UI" };
 }
 
 /* Planner: Jay Jay breaks a goal into 2-5 department-assignable sub-tasks. */
