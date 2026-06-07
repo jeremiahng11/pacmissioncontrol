@@ -10,7 +10,7 @@ import formbody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import { WebSocketServer } from "ws";
 
-import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL, GEMINI_DEMO_MODEL } from "./config.js";
+import { PORT, HOST, SESSION_SECRET, AUTH_USERNAME, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_API_KEY, GEMINI_FLASH_MODEL } from "./config.js";
 import { VALID_DEPARTMENTS } from "./agents.js";
 import {
   initStore, snapshot, bus, createTask, deleteTask, clearTasks, getTask, updateTask, addEvent,
@@ -368,3 +368,4 @@ startOrchestrator();
 startScheduler();
 await app.listen({ port: PORT, host: HOST });
 console.log(`[mission-control] http://${HOST}:${PORT}  (gemini: ${usingGemini ? "live" : "simulated"})`);
+console.log(`[mission-control] models — work/plan/synthesis: ${GEMINI_MODEL} (Pro key) | review/notes/demo: ${GEMINI_FLASH_MODEL} (${GEMINI_FLASH_API_KEY ? "separate Flash key" : "same key — no Flash key set"})`);

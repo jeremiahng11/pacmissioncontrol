@@ -18,7 +18,8 @@ export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 // Optional separate key for Flash calls (review, memory notes, AUTO demo). If
 // unset, Flash calls fall back to GEMINI_API_KEY. Lets you bill Pro and Flash
 // on different keys/projects.
-export const GEMINI_FLASH_API_KEY = process.env.GEMINI_FLASH_API_KEY || "";
+export const GEMINI_FLASH_API_KEY =
+  process.env.GEMINI_FLASH_API_KEY || process.env.FLASH_API_KEY || "";
 // Model for the tasks YOU assign (real work) + planning + synthesis. Pro
 // requires billing enabled on the key's project (free-tier limit is 0).
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-pro";
