@@ -106,7 +106,7 @@ export function useAgentSocket() {
   const assignTask = useCallback((t, files) => api.createTask(t, files).catch((e) => console.error(e)), []);
   const deleteTask = useCallback((id) => api.deleteTask(id).catch(() => {}), []);
   const retryTask = useCallback((id) => api.retryTask(id), []); // let callers see errors
-  const followupTask = useCallback((id, instruction) => api.followupTask(id, instruction).catch((e) => console.error(e)), []);
+  const followupTask = useCallback((id, instruction, files) => api.followupTask(id, instruction, files).catch((e) => console.error(e)), []);
   const suggestImprovements = useCallback((id) => api.suggestImprovements(id).catch((e) => console.error(e)), []);
   const setAutoImprove = useCallback((id, on) => api.autoImprove(id, on).catch(() => {}), []);
   const clearTasks = useCallback((scope) => api.clearTasks(scope).catch(() => {}), []);

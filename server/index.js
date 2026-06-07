@@ -319,11 +319,24 @@ app.post("/api/tasks/:id/autoimprove", (req, reply) => {
   reply.send({ ok: true, autoImprove: on });
 });
 
-app.post("/api/tasks/:id/followup", (req, reply) => {
+app.post("/api/tasks/:id/followup", async (req, reply) => {
   const t = getTask(req.params.id);
   if (!t) return reply.code(404).send({ error: "not found" });
-  const instruction = String((req.body || {}).instruction || "").trim();
+  // Accept files (e.g. a design reference to match) on a follow-up; since this
+  // re-runs the SAME task, the attachment is available to the re-build.
+  let instruction = "";
+  const files = [];
+  if (req.isMultipart()) {
+    for await (const part of req.parts()) {
+      if (part.type === "file") { const buf = await part.toBuffer(); files.push({ filename: part.filename, mime: part.mimetype, data: buf.toString("base64"), size: buf.length }); }
+      else if (part.fieldname === "instruction") instruction = part.value;
+    }
+  } else {
+    instruction = String((req.body || {}).instruction || "");
+  }
+  instruction = instruction.trim();
   if (!instruction) return reply.code(400).send({ error: "instruction required" });
+  for (const f of files) createAttachment({ taskId: t.id, ...f });
   // Re-run the SAME task (same thread/project): append the instruction and
   // re-queue, keeping the current result so the agent builds on it. Its
   // document updates in place rather than spawning a new task/project.

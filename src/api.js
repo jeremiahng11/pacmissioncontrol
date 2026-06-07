@@ -42,7 +42,19 @@ export const api = {
   },
   deleteTask: (id) => req(`/api/tasks/${id}`, { method: "DELETE" }),
   retryTask: (id) => req(`/api/tasks/${id}/retry`, { method: "POST" }),
-  followupTask: (id, instruction) => req(`/api/tasks/${id}/followup`, { method: "POST", body: JSON.stringify({ instruction }) }),
+  followupTask: (id, instruction, files) => {
+    if (files && files.length) {
+      const fd = new FormData();
+      fd.append("instruction", instruction);
+      for (const f of files) fd.append("files", f);
+      return fetch(`/api/tasks/${id}/followup`, { method: "POST", credentials: "same-origin", body: fd }).then((r) => {
+        if (r.status === 401) { window.location.href = "/login"; throw new Error("unauthorized"); }
+        if (!r.ok) throw new Error("follow-up failed");
+        return r.json();
+      });
+    }
+    return req(`/api/tasks/${id}/followup`, { method: "POST", body: JSON.stringify({ instruction }) });
+  },
   suggestImprovements: (id) => req(`/api/tasks/${id}/suggest`, { method: "POST" }),
   autoImprove: (id, on) => req(`/api/tasks/${id}/autoimprove`, { method: "POST", body: JSON.stringify({ on }) }),
   clearTasks: (scope) => req("/api/tasks/clear", { method: "POST", body: JSON.stringify({ scope }) }),

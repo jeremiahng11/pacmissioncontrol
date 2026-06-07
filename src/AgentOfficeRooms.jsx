@@ -605,6 +605,7 @@ export default function AgentOffice() {
   const [files, setFiles] = useState([]);
   const [credForm, setCredForm] = useState({ name: "", value: "" });
   const [followText, setFollowText] = useState("");
+  const [followFiles, setFollowFiles] = useState([]);
   const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
   const [composeMode, setComposeMode] = useState("task");
   const [toasts, setToasts] = useState([]);
@@ -1279,9 +1280,20 @@ export default function AgentOffice() {
                 <div style={SS.secTitle}>FOLLOW UP / IMPROVE</div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <input style={{ ...SS.input, flex: 1 }} placeholder="What to change, add, or expand?" value={followText} onChange={(e) => setFollowText(e.target.value)} />
-                  <button style={SS.continueBtn} onClick={() => { const v = followText.trim(); if (v) { followupTask(selectedTask.id, v); setFollowText(""); setSelected(null); } }}><RotateCw size={13} /> SEND</button>
+                  <button style={SS.continueBtn} onClick={() => { const v = followText.trim(); if (v) { followupTask(selectedTask.id, v, followFiles); setFollowText(""); setFollowFiles([]); setSelected(null); } }}><RotateCw size={13} /> SEND</button>
                 </div>
-                <div style={{ fontSize: 10, color: "#5e7088", marginTop: 4, lineHeight: 1.4 }}>Creates a follow-up that <b>continues from this deliverable</b> — the agent builds on what's done (code, research, etc.), not from scratch.</div>
+                <label style={SS.attachBtn}>
+                  <Paperclip size={12} /> Attach a design reference / file (e.g. match this style)
+                  <input type="file" multiple accept="image/*,application/pdf,.txt,.csv,.md,.json,.html,.css" style={{ display: "none" }} onChange={(e) => { setFollowFiles((prev) => [...prev, ...Array.from(e.target.files)].slice(0, 6)); e.target.value = ""; }} />
+                </label>
+                {followFiles.length > 0 && (
+                  <div style={SS.fileChips}>
+                    {followFiles.map((f, i) => (
+                      <span key={i} style={SS.fileChip} title={f.name}>{/^image\//.test(f.type) ? <ImageIcon size={11} /> : <Paperclip size={11} />}<span style={SS.fileChipName}>{f.name}</span><button type="button" style={SS.fileChipX} onClick={() => setFollowFiles((prev) => prev.filter((_, idx) => idx !== i))}><X size={10} /></button></span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 10, color: "#5e7088", marginTop: 4, lineHeight: 1.4 }}>Creates a follow-up that <b>continues from this deliverable</b> — the agent builds on what's done (code, research, etc.), not from scratch. Attach a reference (e.g. <b>fynco</b>) to push the design toward it.</div>
 
                 <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
                   <button style={SS.ghostBtn} onClick={() => suggestImprovements(selectedTask.id)}><Sparkles size={12} /> SUGGEST IMPROVEMENTS</button>
