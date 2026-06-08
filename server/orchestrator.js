@@ -45,7 +45,7 @@ const depsMet = (t) => !(t.dependsOn || []).some((id) => { const d = getTask(id)
 function nextTaskFor(agent) {
   // Plan tasks are orchestrated by processPlans (decompose -> synthesize), not
   // worked directly by an agent. Tasks waiting on dependencies are held.
-  const queued = getTasks().filter((t) => t.status === "queued" && !t.isPlan && depsMet(t));
+  const queued = getTasks().filter((t) => t.status === "queued" && !t.isPlan && depsMet(t) && (!t.nextRunAt || t.nextRunAt <= Date.now()));
   // Higher priority first, then oldest first.
   const RANK = { high: 0, normal: 1, low: 2 };
   const byAge = (a, b) => (RANK[a.priority] ?? 1) - (RANK[b.priority] ?? 1) || a.createdAt - b.createdAt;
@@ -137,7 +137,7 @@ async function runTask(agent, task) {
     } catch (err) { handleError(agent, task, err); return; }
 
     if (verdict.complete) {
-      updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note });
+      updateTask(task.id, { status: "done", completedAt: Date.now(), reviewNotes: verdict.note, capacityRetries: 0, nextRunAt: null });
       recordOutcome(true);
       deleteIssuesForTask(task.id); // it succeeded — clear any prior issues for it
       if (isUser) {
@@ -176,7 +176,9 @@ async function runTask(agent, task) {
 // the API); a transient error -> re-queue a couple times, then fail + Issue.
 function classify(err) {
   const msg = (err && err.message) || String(err);
-  if (/429|RESOURCE_EXHAUSTED|quota/i.test(msg)) return { kind: "quota", blocking: true, msg };
+  // Out of quota/credits OR temporarily overloaded — don't hard-block: wait for
+  // the per-minute quota to refresh (or Flash to free up) and retry the task.
+  if (/429|RESOURCE_EXHAUSTED|quota|\b503\b|UNAVAILABLE|overloaded|high demand/i.test(msg)) return { kind: "capacity", capacity: true, blocking: false, msg };
   // Bad/unknown model name or other invalid-argument config — retrying won't help.
   if (/unexpected model name|INVALID_ARGUMENT|model.*not found|not found.*model|unsupported model/i.test(msg)) return { kind: "config", blocking: true, msg };
   if (/\b40[13]\b|api key|permission|unauthenticat|invalid.*key/i.test(msg)) return { kind: "auth", blocking: true, msg };
@@ -185,6 +187,19 @@ function classify(err) {
 
 function handleError(agent, task, err) {
   const c = classify(err);
+  // Capacity (rate limit / out of quota / overloaded): re-queue after a delay so
+  // it keeps trying on Flash as the per-minute quota refreshes — instead of
+  // blocking the whole office. Only give up after several tries.
+  if (c.capacity) {
+    const tries = (task.capacityRetries || 0) + 1;
+    if (tries <= 6) {
+      const delay = Math.min(150000, 30000 + tries * 20000); // ~50s..150s
+      updateTask(task.id, { status: "queued", capacityRetries: tries, attempts: 0, startedAt: null, nextRunAt: Date.now() + delay, reviewNotes: "waiting for model capacity/quota" });
+      addEvent({ kind: "system", text: `${agent.name}: model busy / quota-limited — retrying "${task.title}" in ${Math.round(delay / 1000)}s (try ${tries}/6)`, agentId: agent.id, taskId: task.id });
+      return;
+    }
+    c.blocking = true; c.kind = "quota"; // exhausted — surface it
+  }
   if (c.blocking) {
     updateTask(task.id, { status: "blocked", startedAt: null, reviewNotes: c.msg.slice(0, 200) });
     const title = c.kind === "quota" ? `Gemini quota exceeded (${GEMINI_MODEL})`

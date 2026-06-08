@@ -338,6 +338,9 @@ async function qaTestBuild(build, task, model) {
 
 async function qaAndFixBuild(build, task, model) {
   if (!ai || !model || !build || build.length < 200) return build;
+  // On Flash free-tier (Pro out of credits), skip the extra QA round-trips so the
+  // build itself completes without exhausting the per-minute quota.
+  if (isProDown()) return build;
   // Show Scout actively QA-testing (its room scans) for a visible minimum.
   const scoutDone = wakeAgent("scout", `QA-testing ${task.title}`, 6000);
   try { addEvent({ kind: "review", text: `Scout is QA-testing "${task.title}"…`, taskId: task.id, agentId: "scout" }); } catch {}
