@@ -194,9 +194,11 @@ const WEB_FOUNDATION =
   ".screen.active .stagger>*:nth-child(1){animation-delay:.04s}.screen.active .stagger>*:nth-child(2){animation-delay:.1s}.screen.active .stagger>*:nth-child(3){animation-delay:.16s}.screen.active .stagger>*:nth-child(4){animation-delay:.22s}.screen.active .stagger>*:nth-child(5){animation-delay:.28s}.screen.active .stagger>*:nth-child(6){animation-delay:.34s}\n" +
   "button,.pressable{transition:transform .12s ease}button:active,.pressable:active{transform:scale(.96)}\n" +
   "/* app.js */\n" +
-  "function navigateTo(id){const cur=document.querySelector('.screen.active'),next=document.getElementById(id);if(!next||cur===next)return;if(cur){cur.classList.add('exiting');cur.classList.remove('active');setTimeout(()=>cur.classList.remove('exiting'),420);}next.classList.add('active');window.scrollTo(0,0);}\n" +
+  "function navigateTo(id){const cur=document.querySelector('.screen.active'),next=document.getElementById(id);if(!next||cur===next)return;if(cur){cur.classList.add('exiting');cur.classList.remove('active');setTimeout(()=>cur.classList.remove('exiting'),420);}next.classList.add('active');window.scrollTo(0,0);const nx=next.getAttribute('data-next');if(nx){setTimeout(()=>navigateTo(nx),parseInt(next.getAttribute('data-delay'),10)||1800);}}\n" +
   "document.addEventListener('click',e=>{const t=e.target.closest('[data-nav]');if(t){e.preventDefault();navigateTo(t.getAttribute('data-nav'));}});\n" +
-  "RULES: every screen is <div class=\"screen\" id=\"screen-...\">; EXACTLY ONE starts with class=\"screen active\". Wrap each screen's main content in <div class=\"stagger\"> so it animates in. Navigate ONLY via data-nav=\"screen-target\" on buttons (already wired — never write your own broken navigation). On TOP of this, add more polish keyframes: an animated success checkmark on activation, a card reveal/flip, skeleton loaders, a balance count-up. Keep the foundation intact.";
+  "RULES: every screen is <div class=\"screen\" id=\"screen-...\">; EXACTLY ONE starts with class=\"screen active\". Wrap each screen's content in <div class=\"stagger\">. Navigate ONLY via data-nav=\"screen-target\" on buttons (already wired — never write your own broken navigation).\n" +
+  "CRITICAL — NO DEAD ENDS: EVERY screen must have a way forward. For a loading / verifying / processing / splash screen (no button), add data-next=\"screen-target\" (and optional data-delay=\"ms\", default 1800) to the screen div — it AUTO-ADVANCES (handled above). So a 'Verifying your details…' screen MUST be <div class=\"screen\" id=\"screen-verifying\" data-next=\"screen-verified\" data-delay=\"2200\">. Never leave a screen the user can get stuck on.\n" +
+  "On TOP of this, add polish keyframes: an animated success checkmark on activation, a card reveal/flip, skeleton loaders, a balance count-up. Keep the foundation intact.";
 
 const SIM = {
   observatory: ["scan the data streams", "chart the latest signals", "log the night readings"],
@@ -250,6 +252,7 @@ async function qaTestBuild(build, task, model) {
       "You are SCOUT doing INDEPENDENT QA on a build a teammate produced — you did NOT write it, so review it CRITICALLY with fresh eyes and try hard to break it. Find concrete BUGS across LOGIC and UX/UI (any stack — web, mobile, or backend):\n" +
         "- INTENT MISMATCH: a behaviour the task asks for that doesn't actually work (e.g. tapping a card should FLIP it but it only shows an 'activated' label; an Activate button that doesn't change the card; an endpoint that doesn't return what it should).\n" +
         "- LOGIC errors: wrong control flow, state, calculations, validation, edge cases.\n" +
+        "- DEAD-END / STUCK SCREENS: a screen the user can't get past — e.g. a 'Verifying…'/loading/processing/splash screen that never advances (no auto-advance timer and no button), or a button that goes nowhere. EVERY screen must have a way forward; this is a top-severity bug.\n" +
         "- DEAD/UNWIRED controls, broken navigation/routes, unreachable screens.\n" +
         "- STATE that doesn't update after an action.\n" +
         "- UX/UI defects: OVERFLOWING or clipped content, overlapping elements, broken/unresponsive layout, poor contrast/spacing.\n" +
@@ -280,7 +283,8 @@ async function qaAndFixBuild(build, task, model) {
   try { addEvent({ kind: "redo", text: `Scout's QA found ${qa.bugs.length} issue(s) in "${task.title}" — Orbit is fixing…`, taskId: task.id, agentId: task.assignedTo || "orbit" }); } catch {}
   try {
     const fixed = await generate(
-      "You are ORBIT. Independent QA (Scout) tested your build and found the bugs below. FIX EVERY ONE and return the COMPLETE corrected project (same \"===== FILE: path =====\" markers, full files) — keep whatever already works, do not shorten the project.\n\nBUGS TO FIX:\n- " + qa.bugs.join("\n- "),
+      "You are ORBIT. Independent QA (Scout) tested your build and found the bugs below. FIX EVERY ONE and return the COMPLETE corrected project (same \"===== FILE: path =====\" markers, full files) — keep whatever already works, do not shorten the project. " +
+        "For any stuck loading/verifying screen, make it AUTO-ADVANCE: add data-next=\"screen-target\" (optional data-delay=\"ms\") to that screen div, or a setTimeout(()=>navigateTo('screen-target'),1800). Ensure every screen has a way forward.\n\nBUGS TO FIX:\n- " + qa.bugs.join("\n- "),
       `TASK: ${task.title}\nDETAILS: ${task.prompt}\n\nYOUR BUILD:\n${String(build).slice(0, 60000)}`,
       { model, maxOutputTokens: BUILD_MAX_TOKENS, temperature: 0.3 }
     );
