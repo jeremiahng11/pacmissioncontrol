@@ -665,6 +665,18 @@ export function addEvent({ kind, text, agentId = null, taskId = null }) {
   return ev;
 }
 
+// Full activity history for one task (every event incl. agent-to-agent
+// communication), from the DB so it isn't limited by the in-memory cap.
+export async function getEventsForTask(taskId) {
+  if (pool) {
+    try {
+      const { rows } = await pool.query("SELECT id, ts, kind, text, agent_id FROM events WHERE task_id=$1 ORDER BY id", [taskId]);
+      return rows.map((r) => ({ id: `db${r.id}`, ts: new Date(r.ts).getTime(), kind: r.kind, text: r.text, agentId: r.agent_id, taskId }));
+    } catch (e) { console.error("[store] getEventsForTask", e.message); }
+  }
+  return state.events.filter((e) => e.taskId === taskId).slice().reverse();
+}
+
 export function createTask({ title, prompt, department = null, assignedTo = null, createdBy = "user", priorWork = null, parentId = null, mission = null, isPlan = false, priority = "normal", dependsOn = [] }) {
   const task = {
     id: randomUUID(),

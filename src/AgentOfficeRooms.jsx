@@ -4,6 +4,7 @@ import {
   Crown, Zap, Power, Plus, LogOut, Trash2, X, Bot, Sparkles, User, AlertTriangle, Check, Download, RotateCw, Paperclip, Image as ImageIcon, Key, Activity, Search, Eye,
 } from "lucide-react";
 import { useAgentSocket } from "./useAgentSocket";
+import { api } from "./api";
 
 /* ------------------------------------------------------------------ *
  *  MISSION CONTROL — AGENT OFFICE
@@ -607,6 +608,7 @@ export default function AgentOffice() {
   const [credForm, setCredForm] = useState({ name: "", value: "" });
   const [followText, setFollowText] = useState("");
   const [followFiles, setFollowFiles] = useState([]);
+  const [taskActivity, setTaskActivity] = useState([]);
   const [mission, setMission] = useState({ name: "", items: [{ title: "", description: "", department: "" }], sequential: false });
   const [composeMode, setComposeMode] = useState("task");
   const [toasts, setToasts] = useState([]);
@@ -732,6 +734,17 @@ export default function AgentOffice() {
     }
     if (jayQueue.current.length > 5) jayQueue.current = jayQueue.current.slice(-5);
   }, [events]);
+
+  // Full activity history for the open task (every event incl. agent-to-agent
+  // communication), fetched from the DB so it isn't capped; refreshes as new
+  // events for this task arrive.
+  const liveTaskEvtCount = selected ? events.filter((e) => e.taskId === selected).length : 0;
+  useEffect(() => {
+    if (!selected) { setTaskActivity([]); return; }
+    let cancelled = false;
+    api.taskEvents(selected).then((r) => { if (!cancelled) setTaskActivity(r.events || []); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [selected, liveTaskEvtCount]);
 
   // Tick every 20s so the agents' "last active" stays fresh client-side.
   const [, forceTick] = useState(0);
@@ -1258,11 +1271,13 @@ export default function AgentOffice() {
             <div style={SS.resultBox}>{selectedTask.result || (selectedTask.status === "queued" ? "Waiting in the queue…" : "Working…")}</div>
             {selectedTask.reviewNotes && !["failed", "blocked"].includes(selectedTask.status) && <div style={SS.reviewNote}>CTO review: {selectedTask.reviewNotes}</div>}
             {(() => {
-              const evs = events.filter((e) => e.taskId === selectedTask.id).slice().sort((a, b) => a.id - b.id);
+              const evs = taskActivity.length
+                ? taskActivity.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0))
+                : events.filter((e) => e.taskId === selectedTask.id).slice().sort((a, b) => a.id - b.id);
               if (!evs.length) return null;
               return (
                 <>
-                  <div style={SS.secTitle}>ACTIVITY</div>
+                  <div style={SS.secTitle}>ACTIVITY · {evs.length}</div>
                   <div style={SS.timeline}>
                     {evs.map((e) => (
                       <div key={e.id} style={SS.tlRow}>

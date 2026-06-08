@@ -20,6 +20,7 @@ async function req(path, opts = {}) {
 
 export const api = {
   state: () => req("/api/state"),
+  taskEvents: (id) => req(`/api/tasks/${id}/events`),
   document: (id) => req(`/api/documents/${id}`),
   deleteDocument: (id) => req(`/api/documents/${id}`, { method: "DELETE" }),
   deleteMemory: (scope) => req(`/api/memory/${scope}`, { method: "DELETE" }),

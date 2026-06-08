@@ -17,7 +17,7 @@ import {
   getDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues,
   createAttachment, getAttachment, getAttachments, serializeAttachment,
   createRoutine, updateRoutine, deleteRoutine, VALID_CADENCE,
-  setTaskCredential, getTaskCredentials,
+  setTaskCredential, getTaskCredentials, getEventsForTask,
 } from "./store.js";
 import { startScheduler, seedRoutines } from "./schedule.js";
 import multipart from "@fastify/multipart";
@@ -151,6 +151,12 @@ app.post("/api/missions", (req, reply) => {
   }
   if (!created.length) return reply.code(400).send({ error: "no tasks" });
   reply.code(201).send({ count: created.length });
+});
+
+app.get("/api/tasks/:id/events", async (req, reply) => {
+  const t = getTask(req.params.id);
+  if (!t) return reply.code(404).send({ error: "not found" });
+  reply.send({ events: await getEventsForTask(t.id) });
 });
 
 app.get("/api/tasks/:id", (req, reply) => {
