@@ -31,7 +31,7 @@ import { toWordDoc, safeFilename } from "./wordExport.js";
 import { extractFiles, buildZip, extractCodeBlocks, langExt, mimeForExt, baseName, extOf } from "./zipExport.js";
 import { DEPARTMENTS } from "./agents.js";
 import { getAgent } from "./store.js";
-import { usingGemini, embed } from "./gemini.js";
+import { usingGemini, embed, getModelHealth } from "./gemini.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = join(__dirname, "..", "dist");
@@ -406,7 +406,7 @@ const sockets = new Set();
 const wss = new WebSocketServer({ noServer: true });
 
 const broadcast = (frame) => { for (const ws of sockets) if (ws.readyState === ws.OPEN) ws.send(frame); };
-for (const type of ["agent", "task", "event", "settings", "document", "memory", "issue", "routine", "stats"]) {
+for (const type of ["agent", "task", "event", "settings", "document", "memory", "issue", "routine", "stats", "models"]) {
   bus.on(type, (payload) => {
     broadcast(JSON.stringify(type === "settings" ? { type, settings: payload } : { type, [type]: payload }));
   });
@@ -417,7 +417,7 @@ bus.on("issuesReset", () => broadcast(JSON.stringify({ type: "issues", issues: [
 
 wss.on("connection", (ws) => {
   sockets.add(ws);
-  ws.send(JSON.stringify({ type: "snapshot", ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL, demoModel: GEMINI_DEMO_MODEL }));
+  ws.send(JSON.stringify({ type: "snapshot", ...snapshot(), settings: getSettings(), gemini: usingGemini, model: GEMINI_MODEL, demoModel: GEMINI_DEMO_MODEL, models: getModelHealth() }));
   ws.on("close", () => sockets.delete(ws));
   ws.on("error", () => sockets.delete(ws));
 });

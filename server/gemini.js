@@ -6,7 +6,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { GEMINI_API_KEY, GEMINI_FLASH_API_KEY, GEMINI_MODEL, GEMINI_FLASH_MODEL, GEMINI_EMBED_MODEL } from "./config.js";
 import { executeTool } from "./tools.js";
-import { addEvent, recordUsage, setAgent, getAgent } from "./store.js";
+import { addEvent, recordUsage, setAgent, getAgent, bus } from "./store.js";
 import { AGENT_DEFS } from "./agents.js";
 
 const AGENT_BY_DEPT = Object.fromEntries(AGENT_DEFS.map((a) => [a.department, a]));
@@ -53,13 +53,36 @@ const FALLBACKABLE = (msg) =>
 const PRO_DOWN_ERR = (msg) => /prepayment|credits?\s+(are|is)?\s*depleted|depleted|billing|RESOURCE_EXHAUSTED|quota|429/i.test(msg);
 // Circuit breaker: once Pro hits a billing/quota wall, route everything to Flash
 // for a while instead of re-failing on Pro every task. Auto-retries Pro later.
-let proDownUntil = 0;
+let proDownUntil = 0, flashDownUntil = 0;
 const isProDown = () => Date.now() < proDownUntil;
+const isFlashDown = () => Date.now() < flashDownUntil;
+// Live model health for the UI — which model is online vs out of credits/quota.
+export function getModelHealth() {
+  return {
+    pro: { name: GEMINI_MODEL, configured: !!aiPro, online: !!aiPro && !isProDown() },
+    flash: { name: GEMINI_FLASH_MODEL, configured: !!aiFlash, online: !!aiFlash && !isFlashDown(), sharedKey: aiFlash === aiPro },
+    simulated: !aiPro,
+  };
+}
+function emitModels() { try { bus.emit("models", getModelHealth()); } catch {} }
 function markProDown() {
   if (isProDown()) return;
   proDownUntil = Date.now() + 10 * 60 * 1000; // 10 min
   console.warn(`[gemini] Pro (${GEMINI_MODEL}) out of credits/quota — routing to ${GEMINI_FLASH_MODEL} for 10 min`);
   try { addEvent({ kind: "system", text: `⚠️ Pro (${GEMINI_MODEL}) out of credits — running on ${GEMINI_FLASH_MODEL} for now. Top up the Pro key's billing, or this stays on Flash.` }); } catch {}
+  emitModels();
+}
+function markFlashDown() {
+  if (isFlashDown()) return;
+  flashDownUntil = Date.now() + 10 * 60 * 1000;
+  console.warn(`[gemini] Flash (${GEMINI_FLASH_MODEL}) out of credits/quota too`);
+  try { addEvent({ kind: "system", text: `⚠️ Flash (${GEMINI_FLASH_MODEL}) is also out of credits/quota — set FLASH_API_KEY to a free-tier key.` }); } catch {}
+  emitModels();
+}
+// A model came back (a call succeeded) — clear its down flag and notify.
+function markUp(model) {
+  if (/flash/i.test(model)) { if (flashDownUntil) { flashDownUntil = 0; emitModels(); } }
+  else if (proDownUntil) { proDownUntil = 0; console.warn(`[gemini] Pro (${GEMINI_MODEL}) recovered`); emitModels(); }
 }
 let lastFallbackNote = 0;
 function noteFallback(fromModel, msg) {
@@ -117,13 +140,16 @@ async function generate(system, prompt, opts = {}) {
   // Circuit breaker: if Pro is out of credits, go straight to Flash (the free one).
   if (!/flash/i.test(model) && isProDown()) model = GEMINI_FLASH_MODEL;
   try {
-    return await callModel(system, prompt, { ...opts, model });
+    const r = await callModel(system, prompt, { ...opts, model });
+    markUp(model);
+    return r;
   } catch (e) {
     const msg = e?.message || String(e);
     if (canFallback(model, msg)) {
       if (!/flash/i.test(model) && PRO_DOWN_ERR(msg)) markProDown();
       noteFallback(model, msg);
-      return await callModel(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL });
+      try { const r = await callModel(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL }); markUp(GEMINI_FLASH_MODEL); return r; }
+      catch (e2) { if (PRO_DOWN_ERR(e2?.message || "")) markFlashDown(); throw e2; }
     }
     throw e;
   }
@@ -159,13 +185,16 @@ async function generateWithTools(system, prompt, opts = {}) {
   let model = opts.model || GEMINI_MODEL;
   if (!/flash/i.test(model) && isProDown()) model = GEMINI_FLASH_MODEL;
   try {
-    return await toolLoop(system, prompt, { ...opts, model });
+    const r = await toolLoop(system, prompt, { ...opts, model });
+    markUp(model);
+    return r;
   } catch (e) {
     const msg = e?.message || String(e);
     if (canFallback(model, msg)) {
       if (!/flash/i.test(model) && PRO_DOWN_ERR(msg)) markProDown();
       noteFallback(model, msg);
-      return await toolLoop(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL });
+      try { const r = await toolLoop(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL }); markUp(GEMINI_FLASH_MODEL); return r; }
+      catch (e2) { if (PRO_DOWN_ERR(e2?.message || "")) markFlashDown(); throw e2; }
     }
     throw e;
   }

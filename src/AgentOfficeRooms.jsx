@@ -594,7 +594,7 @@ function Placeholder({ icon: Icon, title, desc }) {
 }
 
 export default function AgentOffice() {
-  const { agents: live, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, suggestImprovements, setAutoImprove, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
+  const { agents: live, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, models, connected, assignTask, deleteTask, retryTask, followupTask, suggestImprovements, setAutoImprove, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine } = useAgentSocket();
   const [view, setView] = useState("visual");
   const [form, setForm] = useState({ title: "", department: "", details: "", plan: false, priority: "normal" });
   const [selected, setSelected] = useState(null);
@@ -893,10 +893,29 @@ export default function AgentOffice() {
             <span style={{ ...SS.onDot, background: connected ? "#4ade80" : "#eab308" }} />
             {connected ? "LIVE" : "RECONNECTING"}
           </div>
-          <div style={SS.modePill} title={gemini ? `Work/plan/synthesis: ${model}  ·  Review/notes/demo: ${demoModel}` : "Simulation"}>
-            {gemini ? <Sparkles size={11} /> : <Bot size={11} />} {gemini ? (model || "GEMINI") : "SIMULATION"}
-            {gemini && demoModel && demoModel !== model && <span style={SS.modeSub}> + {demoModel.replace(/^gemini-/, "")}</span>}
-          </div>
+          {gemini && models ? (
+            <div style={SS.modelStatus}>
+              {[["pro", models.pro], ["flash", models.flash]].map(([k, m]) => {
+                const state = !m.configured ? "off" : m.online ? "on" : "down";
+                const col = state === "on" ? "#4ade80" : state === "down" ? "#fb5570" : "#5e7088";
+                return (
+                  <span key={k} style={SS.modelChip} title={
+                    !m.configured ? `${m.name}: no key configured`
+                      : m.online ? `${m.name}: online`
+                      : `${m.name}: OUT OF CREDITS / quota${k === "pro" ? " — running on Flash" : m.sharedKey ? " (same key as Pro — add a free FLASH_API_KEY)" : ""}`
+                  }>
+                    <span style={{ ...SS.modelDot, background: col, boxShadow: state === "on" ? `0 0 5px ${col}` : "none" }} />
+                    <b style={{ color: col }}>{k.toUpperCase()}</b>
+                    <span style={SS.modelName}>{m.name.replace(/^gemini-/, "").replace(/^2\.5-/, "")}</span>
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={SS.modePill} title={gemini ? model : "Simulation"}>
+              {gemini ? <Sparkles size={11} /> : <Bot size={11} />} {gemini ? (model || "GEMINI") : "SIMULATION"}
+            </div>
+          )}
         </div>
 
         <nav style={SS.nav}>
@@ -1401,6 +1420,10 @@ const SS = {
   online: { fontSize: 9.5, display: "flex", alignItems: "center", gap: 5, letterSpacing: 1 },
   onDot: { width: 7, height: 7, borderRadius: 99, boxShadow: "0 0 6px currentColor" },
   modePill: { fontSize: 8.5, letterSpacing: 1, color: "#9db0c8", display: "flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 99, border: "1px solid #243358", background: "#0a1020", flexWrap: "wrap", justifyContent: "center" },
+  modelStatus: { display: "flex", flexDirection: "column", gap: 3 },
+  modelChip: { display: "flex", alignItems: "center", gap: 5, fontSize: 8.5, letterSpacing: 0.8, padding: "2px 8px", borderRadius: 99, border: "1px solid #243358", background: "#0a1020", cursor: "default" },
+  modelDot: { width: 6, height: 6, borderRadius: "50%", flexShrink: 0 },
+  modelName: { color: "#7c8ba8", fontSize: 8 },
   modeSub: { color: "#5e7088" },
   nav: { display: "flex", flexDirection: "column", gap: 3 },
   navItem: { display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 9, fontSize: 13, color: "#8aa0c0", cursor: "pointer", position: "relative" },

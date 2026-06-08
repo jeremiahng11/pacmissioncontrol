@@ -18,6 +18,7 @@ export function useAgentSocket() {
   const [gemini, setGemini] = useState(false);
   const [model, setModel] = useState("");
   const [demoModel, setDemoModel] = useState("");
+  const [models, setModels] = useState(null);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
 
@@ -39,6 +40,7 @@ export function useAgentSocket() {
       if (typeof s.gemini === "boolean") setGemini(s.gemini);
       if (typeof s.model === "string") setModel(s.model);
       if (typeof s.demoModel === "string") setDemoModel(s.demoModel);
+      if (s.models) setModels(s.models);
     };
 
     const connect = () => {
@@ -93,6 +95,7 @@ export function useAgentSocket() {
             else setRoutines((p) => { const i = p.findIndex((x) => x.id === m.routine.id); if (i < 0) return [...p, m.routine]; const n = [...p]; n[i] = m.routine; return n; });
             break;
           case "stats": setStats(m.stats); break;
+          case "models": setModels(m.models); break;
           case "settings": setSettings(m.settings); break;
           default: break;
         }
@@ -132,5 +135,5 @@ export function useAgentSocket() {
   const updateRoutine = useCallback((id, patch) => api.updateRoutine(id, patch).catch(() => {}), []);
   const deleteRoutine = useCallback((id) => api.deleteRoutine(id).catch(() => {}), []);
 
-  return { agents, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, connected, assignTask, deleteTask, retryTask, followupTask, suggestImprovements, setAutoImprove, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine };
+  return { agents, tasks, events, documents, memory, issues, routines, stats, settings, gemini, model, demoModel, models, connected, assignTask, deleteTask, retryTask, followupTask, suggestImprovements, setAutoImprove, clearTasks, createMission, control, logout, openDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues, setCredential, createRoutine, updateRoutine, deleteRoutine };
 }
