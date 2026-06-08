@@ -11,6 +11,20 @@ import { AGENT_DEFS } from "./agents.js";
 
 const AGENT_BY_DEPT = Object.fromEntries(AGENT_DEFS.map((a) => [a.department, a]));
 
+// Wake an idle agent so it visibly works (its room animates) during an
+// interaction (a consult, a QA pass). Returns a finish() that keeps it working
+// for a minimum visible time, then returns it to idle.
+function wakeAgent(agentId, label, minMs = 4500) {
+  let woke = false;
+  try { const a = getAgent(agentId); if (a && a.status === "idle") { setAgent(agentId, { status: "working", task: label }); woke = true; } } catch {}
+  const start = Date.now();
+  return () => {
+    if (!woke) return;
+    const remain = Math.max(0, minMs - (Date.now() - start));
+    setTimeout(() => { try { setAgent(agentId, { status: "idle", task: "standing by" }); } catch {} }, remain);
+  };
+}
+
 // Two clients so Pro and Flash can bill on separate keys. Flash falls back to
 // the Pro key if no separate Flash key is set. Calls route by model name.
 const aiPro = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
@@ -137,8 +151,7 @@ export async function consultAgent(department, question, model = null) {
   if (!ai || !model) return `(${def?.name || department} is unavailable; proceeding without their input.)`;
   const persona = def?.persona || "You are a helpful specialist.";
   // Wake the consulted agent so it visibly works while answering.
-  let busied = false;
-  try { const a = def && getAgent(def.id); if (a && a.status === "idle") { setAgent(def.id, { status: "working", task: `helping: ${String(question).slice(0, 36)}` }); busied = true; } } catch {}
+  const done = def ? wakeAgent(def.id, `helping: ${String(question).slice(0, 36)}`) : () => {};
   try {
     return await generate(
       `${persona} A teammate has asked for your expert input on their task. Answer concisely and practically — a few sentences or a short list — focused on exactly what they need. No preamble.`,
@@ -148,7 +161,7 @@ export async function consultAgent(department, question, model = null) {
   } catch (e) {
     return `(${def?.name || department} couldn't respond: ${e.message})`;
   } finally {
-    if (busied) { try { setAgent(def.id, { status: "idle", task: "standing by" }); } catch {} }
+    done();
   }
 }
 
@@ -255,12 +268,11 @@ async function qaTestBuild(build, task, model) {
 
 async function qaAndFixBuild(build, task, model) {
   if (!ai || !model || !build || build.length < 200) return build;
-  // Show Scout actively QA-testing (its room scans) if it's free.
-  let scoutBusied = false;
-  try { const sc = getAgent("scout"); if (sc && sc.status === "idle") { setAgent("scout", { status: "working", task: `QA-testing ${task.title}` }); scoutBusied = true; } } catch {}
+  // Show Scout actively QA-testing (its room scans) for a visible minimum.
+  const scoutDone = wakeAgent("scout", `QA-testing ${task.title}`, 6000);
   try { addEvent({ kind: "review", text: `Scout is QA-testing "${task.title}"…`, taskId: task.id, agentId: "scout" }); } catch {}
   const qa = await qaTestBuild(build, task, model);
-  if (scoutBusied) { try { setAgent("scout", { status: "idle", task: "standing by" }); } catch {} }
+  scoutDone();
   if (qa.clean || !qa.bugs.length) {
     try { addEvent({ kind: "system", text: `Scout QA: "${task.title}" passed — no bugs found.`, taskId: task.id, agentId: "scout" }); } catch {}
     return build;
