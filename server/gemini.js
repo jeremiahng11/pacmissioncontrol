@@ -136,6 +136,9 @@ export async function consultAgent(department, question, model = null) {
   const def = AGENT_BY_DEPT[department];
   if (!ai || !model) return `(${def?.name || department} is unavailable; proceeding without their input.)`;
   const persona = def?.persona || "You are a helpful specialist.";
+  // Wake the consulted agent so it visibly works while answering.
+  let busied = false;
+  try { const a = def && getAgent(def.id); if (a && a.status === "idle") { setAgent(def.id, { status: "working", task: `helping: ${String(question).slice(0, 36)}` }); busied = true; } } catch {}
   try {
     return await generate(
       `${persona} A teammate has asked for your expert input on their task. Answer concisely and practically — a few sentences or a short list — focused on exactly what they need. No preamble.`,
@@ -144,6 +147,8 @@ export async function consultAgent(department, question, model = null) {
     );
   } catch (e) {
     return `(${def?.name || department} couldn't respond: ${e.message})`;
+  } finally {
+    if (busied) { try { setAgent(def.id, { status: "idle", task: "standing by" }); } catch {} }
   }
 }
 
