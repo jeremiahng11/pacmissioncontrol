@@ -17,7 +17,7 @@ import {
   getDocument, deleteDocument, deleteMemory, resolveIssue, clearIssues,
   createAttachment, getAttachment, getAttachments, serializeAttachment,
   createRoutine, updateRoutine, deleteRoutine, VALID_CADENCE,
-  setTaskCredential, getTaskCredentials, getEventsForTask,
+  setTaskCredential, getTaskCredentials, getEventsForTask, setAgent,
 } from "./store.js";
 import { startScheduler, seedRoutines } from "./schedule.js";
 import multipart from "@fastify/multipart";
@@ -308,10 +308,12 @@ app.post("/api/tasks/clear", (req, reply) => {
 app.post("/api/tasks/:id/retry", async (req, reply) => {
   const t = getTask(req.params.id);
   if (!t) return reply.code(404).send({ error: "not found" });
-  if (!["failed", "blocked"].includes(t.status)) return reply.code(400).send({ error: "only failed or blocked tasks can be continued" });
+  if (t.status === "done") return reply.code(400).send({ error: "task is done — use Follow up to extend it" });
   // Keep the partial result so the agent continues from it. Also resume if the
-  // office was clocked out, log it, and kick a dispatch so it picks up now.
+  // office was clocked out, log it, and kick a dispatch so it picks up now. Free
+  // an agent left stuck on it (e.g. the run was interrupted by the outage).
   if (getSettings().paused) setSetting("paused", false);
+  if (t.assignedTo && ["working", "thinking"].includes(t.status)) { try { setAgent(t.assignedTo, { status: "idle", task: "standing by", lastRunAt: Date.now() }); } catch {} }
   updateTask(t.id, { status: "queued", attempts: 0, startedAt: null, completedAt: null, reviewNotes: "continuing from previous attempt" });
   addEvent({ kind: "system", text: `Jay Jay re-dispatching: ${t.title}`, taskId: t.id });
   await dispatchNow();

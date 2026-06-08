@@ -1,10 +1,13 @@
 // Thin REST client. 401 anywhere means the session lapsed -> back to login.
 
 async function req(path, opts = {}) {
+  // Only set the JSON content-type when there's actually a body — otherwise
+  // Fastify rejects the empty body with a 400 "Bad Request" (e.g. retry/suggest).
+  const hasBody = opts.body != null;
   const r = await fetch(path, {
     credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
     ...opts,
+    headers: { ...(hasBody ? { "Content-Type": "application/json" } : {}), ...(opts.headers || {}) },
   });
   if (r.status === 401) {
     window.location.href = "/login";
