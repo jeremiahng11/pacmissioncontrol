@@ -50,6 +50,15 @@ if (existsSync(DIST)) {
 
 const redirect = (reply, to) => reply.code(302).header("location", to).send();
 
+// Never cache deliverable downloads/previews — after a follow-up the doc id is
+// the same but the content changed; a cached copy would serve stale code.
+app.addHook("onRequest", async (req, reply) => {
+  if (/\/api\/documents\/[^/]+\/(download|zip|code|preview)/.test(req.raw.url || "")) {
+    reply.header("Cache-Control", "no-store, no-cache, must-revalidate");
+    reply.header("Pragma", "no-cache");
+  }
+});
+
 /* ---------- auth gate for /api/* (except login) ---------- */
 app.addHook("preHandler", (req, reply, done) => {
   const url = req.raw.url.split("?")[0];

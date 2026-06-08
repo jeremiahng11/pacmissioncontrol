@@ -625,8 +625,8 @@ export default function AgentOffice() {
     a.click();
     a.remove();
   };
-  const downloadDoc = (id) => downloadFrom(`/api/documents/${id}/download`);
-  const downloadCode = (id) => downloadFrom(`/api/documents/${id}/code`);
+  const downloadDoc = (id) => downloadFrom(`/api/documents/${id}/download?v=${Date.now()}`);
+  const downloadCode = (id) => downloadFrom(`/api/documents/${id}/code?v=${Date.now()}`);
 
   const roomsRef = useRef(null);
   const jayQueue = useRef([]);
