@@ -39,6 +39,8 @@ export const usingGemini = !!aiPro;
 function isRateLimit(msg) {
   return msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota");
 }
+// Transient overload/availability blips — retry, don't fail the task.
+const isTransient = (msg) => /\b503\b|UNAVAILABLE|overloaded|high demand|try again later|\b500\b|INTERNAL|backend error|deadline|ECONNRESET|ETIMEDOUT|fetch failed|timed out/i.test(String(msg));
 
 // Generous so big Pro generations / follow-ups don't time out; still bounded so
 // a hung call can't freeze an agent forever. Override with GEMINI_TIMEOUT_MS.
@@ -48,7 +50,7 @@ const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 150000);
 // bad model, permission. For these we fall back from Pro to Flash so the office
 // keeps working instead of blocking.
 const FALLBACKABLE = (msg) =>
-  /429|RESOURCE_EXHAUSTED|quota|limit:\s*0|PerDay|FreeTier|prepayment|credits?|depleted|billing|exhausted|not found|INVALID_ARGUMENT|unexpected model|unsupported|PERMISSION_DENIED|\b40[13]\b/i.test(msg);
+  /429|RESOURCE_EXHAUSTED|quota|limit:\s*0|PerDay|FreeTier|prepayment|credits?|depleted|billing|exhausted|not found|INVALID_ARGUMENT|unexpected model|unsupported|PERMISSION_DENIED|\b40[13]\b|\b503\b|UNAVAILABLE|overloaded|high demand/i.test(msg);
 // "Pro is out of credits/quota" — a billing/quota wall (not a transient blip).
 const PRO_DOWN_ERR = (msg) => /prepayment|credits?\s+(are|is)?\s*depleted|depleted|billing|RESOURCE_EXHAUSTED|quota|429/i.test(msg);
 // Circuit breaker: once Pro hits a billing/quota wall, route everything to Flash
@@ -99,7 +101,8 @@ async function callModel(system, prompt, { json = false, temperature = 0.7, mode
   const contents = media && media.length
     ? [{ role: "user", parts: [{ text: prompt }, ...media.map((m) => ({ inlineData: { mimeType: m.mimeType, data: m.data } }))] }]
     : prompt;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const MAX_TRIES = 4;
+  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     try {
       const res = await Promise.race([
         clientFor(model || GEMINI_MODEL).models.generateContent({
@@ -118,13 +121,19 @@ async function callModel(system, prompt, { json = false, temperature = 0.7, mode
       return (res.text || "").trim();
     } catch (e) {
       const msg = e?.message || String(e);
-      // Retry once on transient per-minute rate limits (helps Flash free tier).
       // Skip retry on hard caps (limit:0 / per-day / out of credits) — retrying
       // the same depleted key just wastes time; let the Flash fallback take over.
       const hardCap = /limit:\s*0|PerDay|per day|FreeTier|prepayment|credits?|depleted|billing/i.test(msg);
-      if (attempt === 0 && isRateLimit(msg) && !hardCap) {
+      // Transient: model overloaded (503/UNAVAILABLE/high demand) or a 5xx blip —
+      // back off and retry; these clear on their own.
+      const transient = isTransient(msg);
+      const retryable = transient || (isRateLimit(msg) && !hardCap);
+      if (attempt < MAX_TRIES - 1 && retryable) {
         const m = msg.match(/retry in ([\d.]+)s/i) || msg.match(/"retryDelay":\s*"(\d+)s"/);
-        const delay = Math.min(20000, Math.max(3000, (m ? parseFloat(m[1]) : 6) * 1000));
+        const delay = m
+          ? Math.min(20000, Math.max(2000, parseFloat(m[1]) * 1000))
+          : Math.min(16000, 2000 * 2 ** attempt + Math.floor(Math.random() * 1200)); // backoff + jitter
+        if (transient && attempt === 0) { try { addEvent({ kind: "system", text: `${model || GEMINI_MODEL} is busy (high demand) — retrying…` }); } catch {} }
         await wait(delay);
         continue;
       }
