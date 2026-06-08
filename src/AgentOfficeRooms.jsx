@@ -766,6 +766,15 @@ export default function AgentOffice() {
         const id = e.id;
         setCommFx((p) => [...p.filter((x) => x.id !== id), { id, from, to, label }].slice(-4));
         setTimeout(() => setCommFx((p) => p.filter((x) => x.id !== id)), 4500);
+        // The receiving agent acknowledges the message shortly after it lands.
+        const ack = label === "asks" ? "got it! 👍" : label === "bugs" ? "on it!" : label === "QA" ? "checking…" : null;
+        const ackRoom = label === "QA" ? from : to; // QA: Scout acknowledges; else the receiver
+        if (ack) {
+          setTimeout(() => {
+            setSay({ room: ackRoom, text: ack });
+            setTimeout(() => setSay((s) => (s && s.text === ack ? null : s)), 2400);
+          }, 400);
+        }
       }
     }
   }, [events]);
