@@ -48,6 +48,7 @@ const PLACEHOLDER = {
 
 const fmtTok = (n) => (n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n || 0));
 const fmtTime = (ms) => { try { return new Date(ms).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+const agoFrom = (ms) => { if (!ms) return "—"; const s = Math.floor((Date.now() - ms) / 1000); if (s < 45) return "just now"; const m = Math.floor(s / 60); if (m < 1) return "just now"; if (m < 60) return `${m}m ago`; const h = Math.floor(m / 60); if (h < 24) return `${h}h ago`; return `${Math.floor(h / 24)}d ago`; };
 const EVENT_COLOR = { assign: "#facc15", handoff: "#67e8f9", tool: "#38bdf8", review: "#eab308", done: "#4ade80", redo: "#fb923c", fail: "#fb5570", issue: "#fb5570", system: "#9db0c8" };
 const WORK_INFO = { development: ["</>", "coding"], observatory: ["◎", "scanning"], research_lab: ["✎", "writing"], security: ["⛨", "auditing"], admin: ["▤", "sorting"], _: ["•", "working"] };
 const NAME_ROOM = Object.fromEntries(AGENTS.map((a) => [a.name.toUpperCase(), a.room]));
@@ -732,6 +733,10 @@ export default function AgentOffice() {
     if (jayQueue.current.length > 5) jayQueue.current = jayQueue.current.slice(-5);
   }, [events]);
 
+  // Tick every 20s so the agents' "last active" stays fresh client-side.
+  const [, forceTick] = useState(0);
+  useEffect(() => { const id = setInterval(() => forceTick((t) => t + 1), 20000); return () => clearInterval(id); }, []);
+
   // Command palette: ⌘K / Ctrl+K to open global search, Esc to close.
   useEffect(() => {
     const onKey = (e) => {
@@ -1004,7 +1009,7 @@ export default function AgentOffice() {
                       </div>
                     </div>
                     <div style={SS.cardBody}>{a.cto ? "always on · runs the office" : a.task}</div>
-                    {!a.cto && (<div style={SS.cardMeta}><span>last <b style={{ color: "#cfe3d8" }}>{a.last || "—"}</b></span><span>{a.role}</span></div>)}
+                    {!a.cto && (<div style={SS.cardMeta}><span>last active <b style={{ color: a.status === "working" || a.status === "thinking" ? "#4ade80" : "#cfe3d8" }}>{a.status === "working" || a.status === "thinking" ? "now" : agoFrom(a.lastRunAt)}</b></span><span>{a.role}</span></div>)}
                   </div>
                 );
               })}

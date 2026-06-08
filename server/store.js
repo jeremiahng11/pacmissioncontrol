@@ -101,6 +101,7 @@ export function serializeAgent(a) {
     task: a.task,
     currentTaskId: a.currentTaskId || null,
     last: a.cto ? "" : timeAgo(a.lastRunAt),
+    lastRunAt: a.cto ? null : (a.lastRunAt || null), // timestamp so the UI can keep it live
   };
 }
 export function serializeTask(t) {

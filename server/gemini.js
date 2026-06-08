@@ -19,9 +19,12 @@ function wakeAgent(agentId, label, minMs = 4500) {
   try { const a = getAgent(agentId); if (a && a.status === "idle") { setAgent(agentId, { status: "working", task: label }); woke = true; } } catch {}
   const start = Date.now();
   return () => {
+    // Record activity even if the agent was busy — interacting still counts as
+    // "last active just now".
+    try { setAgent(agentId, { lastRunAt: Date.now() }); } catch {}
     if (!woke) return;
     const remain = Math.max(0, minMs - (Date.now() - start));
-    setTimeout(() => { try { setAgent(agentId, { status: "idle", task: "standing by" }); } catch {} }, remain);
+    setTimeout(() => { try { setAgent(agentId, { status: "idle", task: "standing by", lastRunAt: Date.now() }); } catch {} }, remain);
   };
 }
 
