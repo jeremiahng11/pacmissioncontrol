@@ -48,7 +48,19 @@ const TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS || 150000);
 // bad model, permission. For these we fall back from Pro to Flash so the office
 // keeps working instead of blocking.
 const FALLBACKABLE = (msg) =>
-  /429|RESOURCE_EXHAUSTED|quota|limit:\s*0|PerDay|FreeTier|not found|INVALID_ARGUMENT|unexpected model|unsupported|PERMISSION_DENIED|\b40[13]\b/i.test(msg);
+  /429|RESOURCE_EXHAUSTED|quota|limit:\s*0|PerDay|FreeTier|prepayment|credits?|depleted|billing|exhausted|not found|INVALID_ARGUMENT|unexpected model|unsupported|PERMISSION_DENIED|\b40[13]\b/i.test(msg);
+// "Pro is out of credits/quota" — a billing/quota wall (not a transient blip).
+const PRO_DOWN_ERR = (msg) => /prepayment|credits?\s+(are|is)?\s*depleted|depleted|billing|RESOURCE_EXHAUSTED|quota|429/i.test(msg);
+// Circuit breaker: once Pro hits a billing/quota wall, route everything to Flash
+// for a while instead of re-failing on Pro every task. Auto-retries Pro later.
+let proDownUntil = 0;
+const isProDown = () => Date.now() < proDownUntil;
+function markProDown() {
+  if (isProDown()) return;
+  proDownUntil = Date.now() + 10 * 60 * 1000; // 10 min
+  console.warn(`[gemini] Pro (${GEMINI_MODEL}) out of credits/quota — routing to ${GEMINI_FLASH_MODEL} for 10 min`);
+  try { addEvent({ kind: "system", text: `⚠️ Pro (${GEMINI_MODEL}) out of credits — running on ${GEMINI_FLASH_MODEL} for now. Top up the Pro key's billing, or this stays on Flash.` }); } catch {}
+}
 let lastFallbackNote = 0;
 function noteFallback(fromModel, msg) {
   console.warn(`[gemini] ${fromModel} failed (${String(msg).slice(0, 80)}) — falling back to ${GEMINI_FLASH_MODEL}`);
@@ -84,8 +96,9 @@ async function callModel(system, prompt, { json = false, temperature = 0.7, mode
     } catch (e) {
       const msg = e?.message || String(e);
       // Retry once on transient per-minute rate limits (helps Flash free tier).
-      // Skip retry on hard caps (limit:0 / per-day) — retrying just wastes time.
-      const hardCap = /limit:\s*0|PerDay|per day|FreeTier/i.test(msg);
+      // Skip retry on hard caps (limit:0 / per-day / out of credits) — retrying
+      // the same depleted key just wastes time; let the Flash fallback take over.
+      const hardCap = /limit:\s*0|PerDay|per day|FreeTier|prepayment|credits?|depleted|billing/i.test(msg);
       if (attempt === 0 && isRateLimit(msg) && !hardCap) {
         const m = msg.match(/retry in ([\d.]+)s/i) || msg.match(/"retryDelay":\s*"(\d+)s"/);
         const delay = Math.min(20000, Math.max(3000, (m ? parseFloat(m[1]) : 6) * 1000));
@@ -100,12 +113,18 @@ async function callModel(system, prompt, { json = false, temperature = 0.7, mode
 // Wrapper: run on the requested model; if Pro hits quota/billing/availability,
 // transparently retry on Flash so work keeps flowing.
 async function generate(system, prompt, opts = {}) {
-  const model = opts.model || GEMINI_MODEL;
+  let model = opts.model || GEMINI_MODEL;
+  // Circuit breaker: if Pro is out of credits, go straight to Flash (the free one).
+  if (!/flash/i.test(model) && isProDown()) model = GEMINI_FLASH_MODEL;
   try {
     return await callModel(system, prompt, { ...opts, model });
   } catch (e) {
     const msg = e?.message || String(e);
-    if (canFallback(model, msg)) { noteFallback(model, msg); return await callModel(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL }); }
+    if (canFallback(model, msg)) {
+      if (!/flash/i.test(model) && PRO_DOWN_ERR(msg)) markProDown();
+      noteFallback(model, msg);
+      return await callModel(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL });
+    }
     throw e;
   }
 }
@@ -135,14 +154,19 @@ async function toolLoop(system, prompt, { model, media, tools, toolCtx, maxOutpu
   return (final.text || "").trim();
 }
 
-// Same Pro->Flash fallback for the tool-using path (Development agents).
+// Same Pro->Flash fallback (+ circuit breaker) for the tool-using path.
 async function generateWithTools(system, prompt, opts = {}) {
-  const model = opts.model || GEMINI_MODEL;
+  let model = opts.model || GEMINI_MODEL;
+  if (!/flash/i.test(model) && isProDown()) model = GEMINI_FLASH_MODEL;
   try {
     return await toolLoop(system, prompt, { ...opts, model });
   } catch (e) {
     const msg = e?.message || String(e);
-    if (canFallback(model, msg)) { noteFallback(model, msg); return await toolLoop(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL }); }
+    if (canFallback(model, msg)) {
+      if (!/flash/i.test(model) && PRO_DOWN_ERR(msg)) markProDown();
+      noteFallback(model, msg);
+      return await toolLoop(system, prompt, { ...opts, model: GEMINI_FLASH_MODEL });
+    }
     throw e;
   }
 }

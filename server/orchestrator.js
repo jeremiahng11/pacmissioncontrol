@@ -191,7 +191,7 @@ function handleError(agent, task, err) {
       : c.kind === "config" ? `Invalid GEMINI_MODEL: "${GEMINI_MODEL}"`
       : `Gemini ${c.kind} error (${GEMINI_MODEL})`;
     const hint = c.kind === "quota"
-      ? "Set GEMINI_MODEL=gemini-2.5-flash (free tier) or enable billing for Pro."
+      ? "Both Pro and the Flash fallback failed — your key(s) are out of credits/quota. Top up billing on the Pro key, OR set FLASH_API_KEY to a SEPARATE free-tier Gemini key (a project without billing) so Jay Jay can fall back to the free Flash model."
       : c.kind === "config"
       ? "The model name is malformed or unknown. Set GEMINI_MODEL to a valid id — exactly 'gemini-2.5-pro' or 'gemini-2.5-flash' (lowercase, hyphens, no quotes or spaces)."
       : "Check GEMINI_API_KEY and that the model is enabled for your project.";
