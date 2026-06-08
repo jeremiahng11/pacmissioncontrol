@@ -55,6 +55,35 @@ export async function buildZip(files, title, fullMarkdown) {
 
 export const hasCode = (md) => /```/.test(md || "");
 
+// Read the TEXT/code files out of an uploaded .zip so an agent can review or
+// benchmark against them. Skips binaries and junk; caps total size.
+const ZIP_TEXT_EXT = /\.(html?|css|scss|less|js|jsx|ts|tsx|mjs|cjs|json|md|markdown|txt|vue|svelte|py|dart|java|go|rb|php|ya?ml|xml|sql|c|cpp|h|hpp|cs|rs|kt|swift|sh|toml|astro|webmanifest|gitignore|env)$/i;
+const ZIP_SKIP = /(^|\/)(node_modules|\.git|dist|build|\.next|\.cache|coverage|vendor)\//i;
+export async function extractZipText(base64, maxChars = 55000) {
+  try {
+    const buf = Buffer.from(base64, "base64");
+    const zip = await JSZip.loadAsync(buf);
+    const names = Object.keys(zip.files)
+      .filter((n) => !zip.files[n].dir && !ZIP_SKIP.test(n) && ZIP_TEXT_EXT.test(n))
+      .sort((a, b) => (/index\.html?$/i.test(b) ? 1 : 0) - (/index\.html?$/i.test(a) ? 1 : 0) || a.localeCompare(b));
+    const parts = [];
+    let total = 0, omitted = 0;
+    for (const name of names) {
+      if (total >= maxChars) { omitted++; continue; }
+      const content = await zip.files[name].async("string");
+      const slice = content.slice(0, Math.min(content.length, maxChars - total));
+      parts.push(`===== FILE: ${name} =====\n${slice}${slice.length < content.length ? "\n… (truncated)" : ""}`);
+      total += slice.length + name.length + 24;
+    }
+    if (!parts.length) return null;
+    if (omitted) parts.push(`… (${omitted} more file(s) omitted — over size limit)`);
+    return parts.join("\n\n");
+  } catch {
+    return null;
+  }
+}
+export const isZip = (a) => /zip/i.test(a?.mime || "") || /\.zip$/i.test(a?.filename || "");
+
 // All fenced code blocks (used when there are no explicit filenames).
 export function extractCodeBlocks(md) {
   const re = /```([^\n]*)\n([\s\S]*?)```/g;

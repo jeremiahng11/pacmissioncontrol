@@ -845,8 +845,8 @@ export default function AgentOffice() {
         <Sparkles size={12} /> Plan &amp; split — let Jay Jay decompose this into sub-tasks
       </label>
       <label style={SS.attachBtn}>
-        <Paperclip size={12} /> Attach files (image / PDF / text)
-        <input type="file" multiple accept="image/*,application/pdf,.txt,.csv,.md,.json" style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
+        <Paperclip size={12} /> Attach files — image / PDF / text, or a <b>.zip</b> project to review or benchmark
+        <input type="file" multiple accept="image/*,application/pdf,.txt,.csv,.md,.json,.html,.css,.zip,application/zip" style={{ display: "none" }} onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
       </label>
       {files.length > 0 && (
         <div style={SS.fileChips}>
@@ -1293,7 +1293,7 @@ export default function AgentOffice() {
                 </div>
                 <label style={SS.attachBtn}>
                   <Paperclip size={12} /> Attach a design reference / file (e.g. match this style)
-                  <input type="file" multiple accept="image/*,application/pdf,.txt,.csv,.md,.json,.html,.css" style={{ display: "none" }} onChange={(e) => { setFollowFiles((prev) => [...prev, ...Array.from(e.target.files)].slice(0, 6)); e.target.value = ""; }} />
+                  <input type="file" multiple accept="image/*,application/pdf,.txt,.csv,.md,.json,.html,.css,.zip,application/zip" style={{ display: "none" }} onChange={(e) => { setFollowFiles((prev) => [...prev, ...Array.from(e.target.files)].slice(0, 6)); e.target.value = ""; }} />
                 </label>
                 {followFiles.length > 0 && (
                   <div style={SS.fileChips}>

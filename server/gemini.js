@@ -292,7 +292,7 @@ async function qaAndFixBuild(build, task, model) {
 
 /* Worker performs the task, building on the department's memory.
    model=null (or no key) => simulated path: no API call, no cost. */
-export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null, upstream = [], build = null) {
+export async function runWork(agent, task, memoryText = "", model = null, priorWork = null, media = [], tools = null, toolCtx = null, upstream = [], build = null, attachedProjects = []) {
   if (!ai || !model) {
     await wait(1200 + Math.random() * 1800);
     return !model
@@ -316,6 +316,9 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
       upstream.map((u) => `### ${u.title}\n${String(u.result).slice(0, 6000)}`).join("\n\n")
     : "";
   const isBuild = agent.department === "development";
+  const projectBlock = attachedProjects && attachedProjects.length
+    ? `\n\nThe user UPLOADED a project (.zip) for this task — its files are below. Use them as instructed: review/improve them, build on them, or treat them as the BENCHMARK to match or exceed.\n\n${attachedProjects.join("\n\n").slice(0, 60000)}`
+    : "";
   const fileBlock = media && media.length
     ? `\n\nThe user ATTACHED ${media.length} file(s) below — read/analyze them and use them to complete the task.` +
       (isBuild ? ` IMPORTANT: if any attachment is a DESIGN REFERENCE (a screenshot, mockup, or an HTML/CSS file), treat it as the QUALITY BAR and STYLE GUIDE — study its palette, typography, spacing, components, motion and overall polish, and MATCH or EXCEED it. Reproduce that calibre of craft (don't invent a more generic look).` : "")
@@ -343,7 +346,7 @@ export async function runWork(agent, task, memoryText = "", model = null, priorW
       system = `${agent.persona}\n\nBuild a COMPLETE, WORKING, BEAUTIFUL front-end — production quality, not a prototype.\n\n${DESIGN_BAR}\n\n${CRAFT_BAR}\n\n${STYLING_RULES}${foundation}\n\nENGINEERING: Build a PROPER MULTI-FILE web project — do NOT cram everything into one HTML. Use separate files: index.html (and any other screens), css/styles.css (your real design classes), js/app.js (split into modules if helpful), and manifest.json for the PWA. Link css/styles.css and js/app.js with their exact paths. ${ENG_MULTI}`;
     }
   }
-  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${fileBlock}`;
+  const userPrompt = `TASK: ${task.title}\n\nDETAILS:\n${task.prompt}${memBlock}${priorBlock}${fixBlock}${upstreamBlock}${projectBlock}${fileBlock}`;
 
   if (tools && toolCtx) {
     const toolNote = agent.department === "development"

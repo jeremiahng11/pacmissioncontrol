@@ -10,6 +10,7 @@ import {
 } from "./store.js";
 import { runWork, runReview, generateTask, summarizeForMemory, planTask, synthesize, embed, consultAgent, classifyDepartment, recommendStack, suggestImprovements } from "./gemini.js";
 import { toolsFor } from "./tools.js";
+import { extractZipText, isZip } from "./zipExport.js";
 import { DEPARTMENTS } from "./agents.js";
 import { TICK_MS, AUTONOMOUS_DEFAULT, GEMINI_MODEL, GEMINI_DEMO_MODEL, GEMINI_FLASH_MODEL, GEMINI_DAILY_BUDGET_USD } from "./config.js";
 
@@ -92,11 +93,17 @@ async function runTask(agent, task) {
     // the work instead of starting cold (re-queues and manual "Continue").
     const priorWork = isUser ? (task.result || task.priorWork || null) : null;
     // Attached files the agent can read (images / PDF / text). Gemini-supported types only.
-    const media = isUser
-      ? getAttachments(task.id)
-          .filter((a) => /^image\//.test(a.mime) || a.mime === "application/pdf" || /^text\//.test(a.mime))
-          .map((a) => ({ mimeType: a.mime, data: a.data }))
-      : [];
+    const atts = isUser ? getAttachments(task.id) : [];
+    const media = atts
+      .filter((a) => /^image\//.test(a.mime) || a.mime === "application/pdf" || /^text\//.test(a.mime))
+      .map((a) => ({ mimeType: a.mime, data: a.data }));
+    // Uploaded .zip projects: extract the text/code files so the agent can
+    // review them or use them as a benchmark.
+    const attachedProjects = [];
+    for (const z of atts.filter(isZip)) {
+      const text = await extractZipText(z.data).catch(() => null);
+      if (text) attachedProjects.push(`UPLOADED PROJECT "${z.filename}":\n${text}`);
+    }
     // Tools: every agent can hand off (request_help); Development also gets the
     // API/credential tools. consult() runs a peer department's specialist (Flash).
     const tools = isUser ? toolsFor(agent.department) : null;
@@ -118,7 +125,7 @@ async function runTask(agent, task) {
     }
     let result;
     try {
-      result = await runWork(agent, task, memoryText, model, priorWork, media, tools, toolCtx, upstream, build);
+      result = await runWork(agent, task, memoryText, model, priorWork, media, tools, toolCtx, upstream, build, attachedProjects);
     } catch (err) { handleError(agent, task, err); return; }
     updateTask(task.id, { status: "review", result });
 
